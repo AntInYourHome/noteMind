@@ -2,7 +2,7 @@
     "ai": {
         "providers": [
             {
-                "api_key": "sk-YOUR_API_KEY_1",
+                "api_key": "sk-ba3977e04bfc4edfba8cd2c9e74f7f04",
                 "model": "qwen3.6-flash",
                 "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
             }

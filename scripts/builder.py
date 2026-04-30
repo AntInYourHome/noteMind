@@ -17,6 +17,8 @@ class MarkdownBuilder:
 
     def add_frontmatter(self, category: str, tags: list[str]) -> "MarkdownBuilder":
         """添加 YAML frontmatter。"""
+        self._category = category
+        self._tags = tags
         tags_str = ", ".join(tags)
         self.parts.append(f"""---
 source: {self.source_name}
@@ -35,6 +37,7 @@ tags: [{tags_str}]
 
     def add_file_summary(self, summary: str) -> "MarkdownBuilder":
         """添加文件级摘要（短文档用）。"""
+        self._summary = summary
         if summary:
             self.parts.append("## AI 摘要\n")
             self.parts.append(f"{summary}\n")
@@ -86,3 +89,79 @@ tags: [{tags_str}]
     def build(self) -> str:
         """返回最终 Markdown 字符串。"""
         return "\n".join(self.parts)
+
+    def build_index(self, section_links: list[tuple[str, str]]) -> str:
+        """构建索引文件（主文档：仅摘要 + 章节链接）。
+
+        Args:
+            section_links: [(章节文件名（不含.md）, 章节标题), ...]
+        """
+        parts = []
+        # frontmatter
+        tags_str = ", ".join(self._tags if hasattr(self, '_tags') else [])
+        parts.append(f"""---
+source: {self.source_name}
+date: {self.date_str}
+category: {self._category if hasattr(self, '_category') else "其他"}
+tags: [{tags_str}]
+doc_type: index
+sections: {len(section_links)}
+---
+""")
+        # 标题
+        title = Path(self.source_name).stem
+        parts.append(f"# {title}\n")
+        # 全文摘要（第一个 section 的 summary）
+        if hasattr(self, '_summary') and self._summary:
+            parts.append("## 文件摘要\n")
+            parts.append(f"{self._summary}\n\n")
+        # 章节目录（双向链接）
+        parts.append("## 目录\n")
+        for link_name, section_title in section_links:
+            parts.append(f"- [[{link_name}]] {section_title}\n")
+        # 页脚
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        parts.append(f"\n---\n> 由 NoteMind 自动生成于 {now}\n")
+        return "\n".join(parts)
+
+    def build_section_note(self, section: dict, parent_name: str, tags: list[str] = None,
+                           image_descriptions: list[str] = None, image_index: int = 0) -> str:
+        """构建单个章节独立笔记文件。
+
+        Args:
+            section: {"title": "...", "summary": "...", "text": "..."}
+            parent_name: 索引文件名（不含 .md）
+            tags: 该章节的标签
+            image_descriptions: 该章节对应的图片描述
+            image_index: 图片起始索引
+        """
+        parts = []
+        tags_str = ", ".join(tags) if tags else ""
+        parts.append(f"""---
+source: {self.source_name}
+date: {self.date_str}
+category: {self._category if hasattr(self, '_category') else "其他"}
+tags: [{tags_str}]
+parent: {parent_name}
+---
+""")
+        # 章节标题
+        if section.get("title"):
+            parts.append(f"# {section['title']}\n")
+        # 摘要
+        if section.get("summary"):
+            parts.append("## 摘要\n")
+            parts.append(f"{section['summary']}\n\n")
+        # 正文
+        if section.get("text"):
+            parts.append(f"{section['text']}\n\n")
+        # 图片
+        if image_descriptions and image_descriptions[image_index:]:
+            parts.append("## 图片\n")
+            for desc in image_descriptions[image_index:]:
+                parts.append(f"> {desc}\n\n")
+        # 返回链接
+        parts.append(f"\n> 返回 [[{parent_name}]]")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        parts.append(f"\n> 由 NoteMind 自动生成于 {now}\n")
+        return "\n".join(parts)

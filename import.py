@@ -181,42 +181,83 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
 
     # 6. 构建 Markdown
     date_str = datetime.now().strftime("%Y-%m-%d")
-    builder = (
-        MarkdownBuilder(fname, date_str)
-        .add_frontmatter(category, analysis.tags)
-        .add_title()
-    )
+    builder = MarkdownBuilder(fname, date_str)
 
-    # 短文档：显示全文摘要
-    if len(analysis.sections) == 1 and not analysis.sections[0].get("title"):
-        builder.add_file_summary(analysis.sections[0].get("summary", ""))
+    # 判断是否需要拆分大文档
+    section_count = len(analysis.sections)
+    total_chars = sum(len(s.get("text", "")) for s in analysis.sections)
+    split_sections = cfg["import"].get("split_threshold_sections", 5)
+    split_chars = cfg["import"].get("split_threshold_chars", 10000)
+    should_split = section_count >= split_sections or total_chars > split_chars
 
-    # 章节内容
-    builder.add_sections(analysis.sections)
+    if should_split:
+        logger.info(f"  文档较大 ({section_count} 章节, {total_chars} 字符)，自动拆分为多文件")
 
-    # 图片
-    if vault_image_paths:
-        builder.add_images(vault_image_paths, analysis.image_descriptions)
+        # 构建章节链接列表
+        section_links = []
+        for i, sr in enumerate(analysis.sections):
+            title = sr.get("title", f"第{i+1}章")
+            safe_title = title.replace(" ", "_").replace("/", "_").replace("\\", "_")
+            link_name = f"{date_str}-{safe_name}-{i+1:02d}-{safe_title}"
+            section_links.append((link_name, title))
 
-    # 标签 + 页脚
-    builder.add_tags_section(analysis.tags).add_footer()
+        # 写索引文件（主文档）
+        builder.add_frontmatter(category, analysis.tags)
+        first_summary = analysis.sections[0].get("summary", "") if analysis.sections else ""
+        builder.add_file_summary(first_summary)
 
-    # 7. 写入文件
-    dest_dir = os.path.join(vault_path, category)
-    os.makedirs(dest_dir, exist_ok=True)
-    filename = f"{date_str}-{safe_name}.md"
-    dest_path = os.path.join(dest_dir, filename)
+        dest_dir = os.path.join(vault_path, category)
+        os.makedirs(dest_dir, exist_ok=True)
+        index_filename = f"{date_str}-{safe_name}.md"
+        index_path = os.path.join(dest_dir, index_filename)
 
-    # 处理文件名冲突
-    if os.path.exists(dest_path):
-        base, ext = os.path.splitext(filename)
-        counter = 1
-        while os.path.exists(dest_path):
-            dest_path = os.path.join(dest_dir, f"{base}_{counter}{ext}")
-            counter += 1
+        index_content = builder.build_index(section_links)
+        with open(index_path, "w", encoding="utf-8") as f:
+            f.write(index_content)
+        logger.info(f"  [INDEX] {index_filename} ({len(section_links)} 个章节)")
 
-    with open(dest_path, "w", encoding="utf-8") as f:
-        f.write(builder.build())
+        # 写每个章节文件
+        parent_name = f"{date_str}-{safe_name}"
+        for i, (link_name, section_title) in enumerate(section_links):
+            sr = analysis.sections[i]
+            chapter_content = builder.build_section_note(
+                section=sr,
+                parent_name=parent_name,
+                tags=analysis.tags,
+            )
+            chapter_path = os.path.join(dest_dir, f"{link_name}.md")
+            with open(chapter_path, "w", encoding="utf-8") as f:
+                f.write(chapter_content)
+
+        dest_path = index_path  # 返回索引文件路径
+    else:
+        # 短文档：单文件输出
+        builder.add_frontmatter(category, analysis.tags).add_title()
+
+        if len(analysis.sections) == 1 and not analysis.sections[0].get("title"):
+            builder.add_file_summary(analysis.sections[0].get("summary", ""))
+
+        builder.add_sections(analysis.sections)
+
+        if vault_image_paths:
+            builder.add_images(vault_image_paths, analysis.image_descriptions)
+
+        builder.add_tags_section(analysis.tags).add_footer()
+
+        dest_dir = os.path.join(vault_path, category)
+        os.makedirs(dest_dir, exist_ok=True)
+        filename = f"{date_str}-{safe_name}.md"
+        dest_path = os.path.join(dest_dir, filename)
+
+        if os.path.exists(dest_path):
+            base, ext = os.path.splitext(filename)
+            counter = 1
+            while os.path.exists(dest_path):
+                dest_path = os.path.join(dest_dir, f"{base}_{counter}{ext}")
+                counter += 1
+
+        with open(dest_path, "w", encoding="utf-8") as f:
+            f.write(builder.build())
 
     # 8. 更新去重索引
     if cfg["import"].get("dedup", True):
@@ -247,8 +288,13 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
     }
 
 
-def update_moc(vault_path: str) -> None:
-    """更新知识树 MOC (Map of Content)。"""
+def update_moc(vault_path: str, max_tags_per_note: int = 3) -> None:
+    """更新知识树 MOC (Map of Content)。
+
+    Args:
+        vault_path: Vault 根目录
+        max_tags_per_note: 每个笔记最多显示标签数（防止标签过多导致卡顿）
+    """
     cfg = load_config()
     categories = cfg["vault"].get("categories", ["其他"])
     moc_path = os.path.join(vault_path, "MOC.md")
@@ -265,17 +311,41 @@ def update_moc(vault_path: str) -> None:
         if not notes:
             continue
 
-        lines.append(f"\n## {cat} ({len(notes)} 篇)\n")
+        # 只统计非拆分章节文件（即排除 parent 字段的章节文件）
+        index_notes = []
         for note in notes:
+            # 快速检查：索引文件通常没有 parent frontmatter
+            full_path = os.path.join(cat_dir, note)
+            try:
+                with open(full_path, "r", encoding="utf-8") as nf:
+                    first_200 = nf.read(200)
+                    if "parent:" not in first_200 and "doc_type: index" not in first_200:
+                        index_notes.append(note)
+                    elif "doc_type: index" in first_200:
+                        index_notes.append(note)
+            except Exception:
+                pass
+
+        if not index_notes:
+            continue
+
+        lines.append(f"\n## {cat} ({len(index_notes)} 篇)\n")
+        for note in index_notes:
             note_path = Path(cat) / Path(note).stem
             note_tags = ""
             full_path = os.path.join(cat_dir, note)
             try:
                 with open(full_path, "r", encoding="utf-8") as nf:
-                    for line in nf:
+                    # 只读取前 500 字符（frontmatter 区域）
+                    content = nf.read(500)
+                    for line in content.split("\n"):
                         if line.startswith("tags:"):
                             tags_raw = line[len("tags:"):].strip().strip("[]")
-                            note_tags = ", ".join([f"`#{t.strip()}`" for t in tags_raw.split(",") if t.strip()])
+                            tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
+                            display_tags = tags[:max_tags_per_note]
+                            note_tags = ", ".join([f"`#{t}`" for t in display_tags])
+                            if len(tags) > max_tags_per_note:
+                                note_tags += f" 等{len(tags)}个"
                             break
             except Exception:
                 pass
