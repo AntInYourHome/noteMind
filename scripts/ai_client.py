@@ -44,6 +44,7 @@ class ProviderHealthTracker:
         self.failure_count = 0
         self.rate_limit_count = 0
         self.consecutive_429 = 0  # 连续 429 次数
+        self.consecutive_5xx = 0  # 连续 5xx 次数
         self.last_error: str | None = None
         self.last_success_time: float | None = None
         self.last_error_time: float | None = None
@@ -53,16 +54,19 @@ class ProviderHealthTracker:
         self.success_count += 1
         self.last_success_time = time.time()
         self.consecutive_429 = 0  # 成功后重置连续计数
+        self.consecutive_5xx = 0
         self.circuit_open_until = 0  # 重置冷却
 
-    def record_failure(self, error: str, is_rate_limit: bool = False):
+    def record_failure(self, error: str, is_rate_limit: bool = False,
+                       is_server_error: bool = False):
         self.failure_count += 1
         self.last_error = error
         self.last_error_time = time.time()
+
         if is_rate_limit:
             self.rate_limit_count += 1
             self.consecutive_429 += 1
-            # 达到阈值：5 分钟长冷却
+            # 连续 429 达到阈值：5 分钟长冷却
             if self.consecutive_429 >= self.DEGRADATION_THRESHOLD:
                 cool = 300  # 5 分钟
                 model = self.provider.get('model', '?')
@@ -73,6 +77,24 @@ class ProviderHealthTracker:
             else:
                 cool = 30  # 普通 30 秒冷却
             self.circuit_open_until = time.time() + cool
+
+        elif is_server_error:
+            self.consecutive_5xx += 1
+            # 连续 5xx 达到阈值：2 分钟中冷却
+            if self.consecutive_5xx >= self.DEGRADATION_THRESHOLD:
+                cool = 120  # 2 分钟
+                model = self.provider.get('model', '?')
+                logger.warning(
+                    f"[降级] Provider {model} 连续 5xx {self.consecutive_5xx} 次，"
+                    f"进入中冷却 {cool}s"
+                )
+            else:
+                cool = 15  # 普通 15 秒冷却
+            self.circuit_open_until = time.time() + cool
+
+        else:
+            # 其他错误：不触发冷却，仅记录
+            pass
 
     def is_available(self) -> bool:
         """是否可用（未处于冷却中）。"""
@@ -152,26 +174,34 @@ class APIProviderPool:
             self._index += 1
             return self.providers[idx].copy(), self._trackers[idx]
 
-    def _on_429(self, tracker: ProviderHealthTracker):
-        """处理 429 限流事件，触发降级链路。"""
+    def _on_error(self, tracker: ProviderHealthTracker, error_str: str, error_type: str):
+        """处理 429 限流或 5xx 服务器错误，触发降级链路。
+
+        Args:
+            tracker: 该 provider 的健康追踪器
+            error_str: 错误信息字符串
+            error_type: '429' 或 '5xx'
+        """
         with self._lock:
             self._total_429_count += 1
 
-        tracker.record_failure("429", is_rate_limit=True)
+        is_rate_limit = (error_type == "429")
+        tracker.record_failure(error_str, is_rate_limit=is_rate_limit,
+                               is_server_error=not is_rate_limit)
 
-        # 检查是否所有 provider 都被降级
+        # 检查是否所有 provider 都不可用
         available_count = sum(1 for t in self._trackers if t.is_available())
         total = len(self._trackers)
 
         if available_count == 0:
             logger.warning(
-                f"[降级] 所有 provider 均不可用，"
-                f"触发全局降级模式（429×{self._total_429_count}）"
+                f"[降级] 所有 provider 均不可用（{error_type}），"
+                f"触发全局降级模式（错误×{self._total_429_count}）"
             )
             self._enter_degraded_mode()
         elif available_count < total:
             logger.info(
-                f"[降级] {total - available_count}/{total} 个 provider 已移出，"
+                f"[降级] {total - available_count}/{total} 个 provider 不可用，"
                 f"剩余 {available_count} 个可用"
             )
 
@@ -198,9 +228,10 @@ class APIProviderPool:
             return result
         except Exception as e:
             error_str = str(e)
-            is_rate_limit = "429" in error_str
-            if is_rate_limit:
-                self._on_429(tracker)
+            if "429" in error_str:
+                self._on_error(tracker, error_str, error_type="429")
+            elif any(code in error_str for code in ("500", "502", "503", "504")):
+                self._on_error(tracker, error_str, error_type="5xx")
             else:
                 tracker.record_failure(error_str, is_rate_limit=False)
             raise
@@ -302,6 +333,7 @@ class APIProviderPool:
             tracker.failure_count = 0
             tracker.rate_limit_count = 0
             tracker.consecutive_429 = 0
+            tracker.consecutive_5xx = 0
             tracker.last_error = None
             tracker.circuit_open_until = 0
         self._degraded_mode = False
@@ -507,7 +539,8 @@ def analyze_provider_from_logs(log_lines: list[str]) -> list[dict]:
         "timeout": re.compile(r"API 超时"),
         "network_error": re.compile(r"API 网络错误"),
         "auth_error": re.compile(r"状态码: (401|403)"),
-        "degradation": re.compile(r"\[降级\]"),
+        "degradation": re.compile(r"\[降级\].*429"),
+        "server_degradation": re.compile(r"\[降级\].*5xx"),
     }
 
     stats = {
@@ -517,6 +550,7 @@ def analyze_provider_from_logs(log_lines: list[str]) -> list[dict]:
         "network_error": 0,
         "auth_error": 0,
         "degradation": 0,
+        "server_degradation": 0,
     }
 
     for line in log_lines:
@@ -538,9 +572,17 @@ def analyze_provider_from_logs(log_lines: list[str]) -> list[dict]:
     if stats["degradation"] > 0:
         analysis.append({
             "severity": "HIGH",
-            "issue": "Provider 降级触发",
+            "issue": "Provider 429 降级触发",
             "count": stats["degradation"],
-            "advice": "系统已自动降级（降并发/换模型），如频繁触发需增加 Key",
+            "advice": "系统已自动冷却（换 Key/降并发），如频繁触发需增加 Key",
+        })
+
+    if stats["server_degradation"] > 0:
+        analysis.append({
+            "severity": "MEDIUM",
+            "issue": "Provider 5xx 降级触发",
+            "count": stats["server_degradation"],
+            "advice": "API 服务端不稳定，已自动冷却该 provider，持续出现需考虑更换服务商",
         })
 
     if stats["rate_limit"] > 0:
