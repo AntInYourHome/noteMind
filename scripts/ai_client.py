@@ -414,6 +414,16 @@ def _call_with_provider(provider: dict, messages: list, max_tokens: int = 500, r
                 delay = _BASE_DELAY * (2 ** (attempt - 1)) + random.uniform(0, 1)
                 logger.warning(f"API 调用失败 (第 {attempt}/{max_retries} 次, 状态码: {e.code}), {delay:.1f}s 后重试...")
                 time.sleep(delay)
+            elif e.code == 307:
+                # 307 临时重定向：不抛异常，跟随重定向重试
+                redirect_url = e.headers.get("Location")
+                if redirect_url:
+                    req.full_url = redirect_url
+                    delay = _BASE_DELAY + random.uniform(0, 0.5)
+                    logger.warning(f"API 307 重定向到: {redirect_url}, {delay:.1f}s 后重试...")
+                    time.sleep(delay)
+                    continue
+                raise last_error
             else:
                 raise last_error
         except urllib.error.URLError as e:
