@@ -41,6 +41,75 @@ _DEFAULT_PROVIDER = {
     "multimodal": False,
 }
 
+# Level 3: 模型路由 — 标签提取使用更便宜模型（可选）
+_tags_model: dict | None = None
+
+
+def set_tags_model(model_config: dict | None):
+    """设置标签提取专用的模型（通常为更便宜的模型）。
+
+    Args:
+        model_config: {"model": "qwen-turbo", "base_url": "...", "api_key": "..."}
+    """
+    global _tags_model
+    _tags_model = model_config
+
+
+def _get_tags_model() -> dict | None:
+    """获取标签提取模型配置。"""
+    return _tags_model
+
+
+def _call_with_model(model_config: dict, messages: list, max_tokens: int = 500, retries: int = 3) -> dict:
+    """使用指定的模型配置调用 API（不经过 provider 池）。"""
+    import urllib.request
+    import urllib.error
+    import json
+    import random
+
+    url = f"{model_config['base_url']}/chat/completions"
+    payload = json.dumps({
+        "model": model_config["model"],
+        "messages": messages,
+        "max_tokens": max_tokens,
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        url, data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {model_config.get('api_key', '')}",
+        },
+        method="POST",
+    )
+
+    for attempt in range(1, retries + 1):
+        try:
+            start = time.time()
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                latency = time.time() - start
+                data = json.loads(resp.read().decode("utf-8"))
+                usage = data.get("usage", {})
+                choices = data.get("choices")
+                if not choices:
+                    raise RuntimeError(f"API 返回空 choices: {data}")
+                message = choices[0].get("message")
+                if not message:
+                    raise RuntimeError(f"API 返回空 message: {data}")
+                content = message.get("content", "")
+                return {
+                    "content": content.strip() if content else "[空响应]",
+                    "input_tokens": usage.get("prompt_tokens", 0),
+                    "output_tokens": usage.get("completion_tokens", 0),
+                    "latency": latency,
+                }
+        except Exception as e:
+            if attempt < retries:
+                delay = 1 * (2 ** (attempt - 1)) + random.uniform(0, 1)
+                time.sleep(delay)
+            else:
+                raise
+
 
 class ProviderHealthTracker:
     """追踪单个 provider 的健康状态。"""
@@ -571,19 +640,24 @@ def reset_perf_stats():
     })
 
 
+# --- Prompt 模板（Level 2: 精简 + system message 缓存） ---
+
+_SUMMARY_SYSTEM = "你是文档摘要专家。用中文提取核心要点，控制在 300 字以内。"
+_TAGS_SYSTEM = "你是关键词提取专家。从内容中提取 3-8 个中文标签，用逗号分隔。"
+
+
 def generate_summary(text: str) -> str:
-    """对长文本生成摘要。"""
+    """对长文本生成摘要。
+
+    使用 system message 分离模式：固定模板放 system（DashScope 缓存），
+    只发送文本到 user，减少每次请求的 input tokens。
+    """
     if len(text) < 200:
         return text.strip()
 
     messages = [
-        {
-            "role": "user",
-            "content": (
-                f"请用中文总结以下内容，提取核心要点（3-5 条），"
-                f"控制在 300 字以内：\n\n{text[:5000]}"
-            ),
-        }
+        {"role": "system", "content": _SUMMARY_SYSTEM},
+        {"role": "user", "content": text[:5000]},
     ]
 
     try:
@@ -599,22 +673,27 @@ def generate_summary(text: str) -> str:
 
 
 def generate_tags(text: str) -> list[str]:
-    """从文本中提取 3-8 个标签。"""
+    """从文本中提取 3-8 个标签。
+
+    Level 3: 模型路由 — 如果配置了 tags_model，用更便宜的模型做标签提取。
+    Level 2: system message 分离 + 更短的文本截取（1500 字符）。
+    """
     if len(text) < 50:
         return []
 
     messages = [
-        {
-            "role": "user",
-            "content": (
-                f"请从以下内容中提取 3-8 个中文标签（关键词），"
-                f"用逗号分隔，只返回标签：\n\n{text[:3000]}"
-            ),
-        }
+        {"role": "system", "content": _TAGS_SYSTEM},
+        {"role": "user", "content": text[:1500]},
     ]
 
+    # Level 3: 如果有 tags_model 配置，使用更便宜的模型
+    model_override = _get_tags_model()
+
     try:
-        result = _call_api(messages, max_tokens=100)
+        if model_override:
+            result = _call_with_model(model_override, messages, max_tokens=100)
+        else:
+            result = _call_api(messages, max_tokens=100)
         _perf_stats["api_calls"] += 1
         _perf_stats["input_tokens"] += result.get("input_tokens", 0)
         _perf_stats["output_tokens"] += result.get("output_tokens", 0)

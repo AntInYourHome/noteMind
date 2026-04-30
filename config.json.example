@@ -16,7 +16,12 @@
         ],
         "concurrency": 5,
         "max_retries": 3,
-        "retry_delay": 1
+        "retry_delay": 1,
+        "tags_model": {
+            "model": "qwen-turbo",
+            "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "api_key": "sk-YOUR_API_KEY_FOR_TAGS"
+        }
     },
     "vault": {
         "path": "~/knowledge-base",

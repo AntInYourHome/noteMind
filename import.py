@@ -515,9 +515,15 @@ def main():
     max_retries = ai_cfg.get("max_retries", 3)
     retry_delay = ai_cfg.get("retry_delay", 1)
     if providers:
-        from scripts.ai_client import APIProviderPool, init_pool
+        from scripts.ai_client import APIProviderPool, init_pool, set_tags_model
         init_pool(providers, concurrency)
         logger.info(f"AI Provider 池: {len(providers)} 个 Key, 并发: {concurrency}")
+
+        # Level 3: 模型路由 — 标签提取使用更便宜模型
+        tags_model_cfg = ai_cfg.get("tags_model")
+        if tags_model_cfg:
+            set_tags_model(tags_model_cfg)
+            logger.info(f"标签模型: {tags_model_cfg.get('model')} (Level 3 模型路由)")
     else:
         logger.warning("未配置 providers，使用单 API Key（环境变量）")
 
