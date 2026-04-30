@@ -19,6 +19,16 @@ import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 
+# --- 测试模式：模拟 10% 随机 API 错误 ---
+# 设置环境变量 NOTEMIND_TEST_CHAOS=1 启用
+_TEST_CHAOS = os.environ.get("NOTEMIND_TEST_CHAOS", "0") == "1"
+_CHAOS_ERROR_TYPES = [
+    RuntimeError("AI API 错误 (429): {\"error\":{\"message\":\"Rate limit exceeded\"}}"),
+    RuntimeError("AI API 错误 (500): {\"error\":{\"message\":\"Internal server error\"}}"),
+    RuntimeError("AI API 错误 (503): {\"error\":{\"message\":\"Service temporarily unavailable\"}}"),
+    RuntimeError("AI API 错误 (502): {\"error\":{\"message\":\"Bad gateway\"}}"),
+]
+
 logger = logging.getLogger("notemind")
 
 
@@ -219,13 +229,20 @@ class APIProviderPool:
                 )
 
     def call(self, messages: list, max_tokens: int = 500, retries: int = 3,
-             multimodal: bool = False) -> str:
-        """调用 API，自动选择可用的 provider。"""
+             multimodal: bool = False) -> dict:
+        """调用 API，自动选择可用的 provider。
+
+        Returns:
+            {"content": str, "input_tokens": int, "output_tokens": int, "latency": float}
+        """
         provider, tracker = self.next_provider(multimodal=multimodal)
         try:
             result = _call_with_provider(provider, messages, max_tokens, retries)
             tracker.record_success()
-            return result
+            # 向后兼容：如果 _call_with_provider 返回 dict，则返回完整结果
+            if isinstance(result, dict):
+                return result
+            return {"content": result, "input_tokens": 0, "output_tokens": 0, "latency": 0}
         except Exception as e:
             error_str = str(e)
             if "429" in error_str:
@@ -235,6 +252,12 @@ class APIProviderPool:
             else:
                 tracker.record_failure(error_str, is_rate_limit=False)
             raise
+
+    def call_text(self, messages: list, max_tokens: int = 500, retries: int = 3,
+                  multimodal: bool = False) -> str:
+        """向后兼容：只返回文本内容。"""
+        result = self.call(messages, max_tokens, retries, multimodal)
+        return result.get("content", "") if isinstance(result, dict) else result
 
     def batch_call(self, tasks: list[dict]) -> list:
         """批量并发调用，自动根据降级状态调整并发度。"""
@@ -370,7 +393,13 @@ _MAX_RETRIES = 3
 _BASE_DELAY = 1.0
 
 
-def _call_with_provider(provider: dict, messages: list, max_tokens: int = 500, retries: int = None) -> str:
+def _call_with_provider(provider: dict, messages: list, max_tokens: int = 500, retries: int = None) -> dict:
+    # --- 测试模式：10% 随机注入错误 ---
+    if _TEST_CHAOS and random.random() < 0.1:
+        err = random.choice(_CHAOS_ERROR_TYPES)
+        logger.warning(f"[混沌测试] 模拟 API 错误: {type(err).__name__}")
+        raise err
+
     api_key = provider.get("api_key", "")
     base_url = provider.get("base_url", _DEFAULT_PROVIDER["base_url"])
     model = provider.get("model", _DEFAULT_PROVIDER["model"])
@@ -397,8 +426,11 @@ def _call_with_provider(provider: dict, messages: list, max_tokens: int = 500, r
 
     for attempt in range(1, max_retries + 1):
         try:
+            start = time.time()
             with urllib.request.urlopen(req, timeout=60) as resp:
+                latency = time.time() - start
                 data = json.loads(resp.read().decode("utf-8"))
+                usage = data.get("usage", {})
                 choices = data.get("choices")
                 if not choices:
                     raise RuntimeError(f"API 返回空 choices: {data}")
@@ -406,24 +438,39 @@ def _call_with_provider(provider: dict, messages: list, max_tokens: int = 500, r
                 if not message:
                     raise RuntimeError(f"API 返回空 message: {data}")
                 content = message.get("content", "")
-                return content.strip() if content else "[空响应]"
+                content = content.strip() if content else "[空响应]"
+                return {
+                    "content": content,
+                    "input_tokens": usage.get("prompt_tokens", 0),
+                    "output_tokens": usage.get("completion_tokens", 0),
+                    "latency": latency,
+                }
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", errors="replace")
-            last_error = RuntimeError(f"AI API 错误 ({e.code}): {body}")
-            if attempt < max_retries:
-                delay = _BASE_DELAY * (2 ** (attempt - 1)) + random.uniform(0, 1)
-                logger.warning(f"API 调用失败 (第 {attempt}/{max_retries} 次, 状态码: {e.code}), {delay:.1f}s 后重试...")
-                time.sleep(delay)
-            elif e.code == 307:
-                # 307 临时重定向：不抛异常，跟随重定向重试
+
+            # 307 临时重定向：立即跟随，不计入重试次数
+            if e.code == 307:
                 redirect_url = e.headers.get("Location")
                 if redirect_url:
-                    req.full_url = redirect_url
+                    # 重新构建 Request 对象指向新 URL
+                    req = urllib.request.Request(
+                        redirect_url,
+                        data=req.data,
+                        headers=dict(req.headers),
+                        method="POST",
+                    )
                     delay = _BASE_DELAY + random.uniform(0, 0.5)
                     logger.warning(f"API 307 重定向到: {redirect_url}, {delay:.1f}s 后重试...")
                     time.sleep(delay)
                     continue
-                raise last_error
+                last_error = RuntimeError(f"AI API 307 重定向但无 Location 头")
+            else:
+                last_error = RuntimeError(f"AI API 错误 ({e.code}): {body}")
+
+            if attempt < max_retries:
+                delay = _BASE_DELAY * (2 ** (attempt - 1)) + random.uniform(0, 1)
+                logger.warning(f"API 调用失败 (第 {attempt}/{max_retries} 次, 状态码: {e.code}), {delay:.1f}s 后重试...")
+                time.sleep(delay)
             else:
                 raise last_error
         except urllib.error.URLError as e:
@@ -449,8 +496,12 @@ def _call_with_provider(provider: dict, messages: list, max_tokens: int = 500, r
 # --- 向后兼容的单调用接口 ---
 
 def _call_api(messages: list, max_tokens: int = 500, retries: int = None,
-              multimodal: bool = False) -> str:
-    """向后兼容：使用全局 provider 池调用。"""
+              multimodal: bool = False) -> dict:
+    """向后兼容：使用全局 provider 池调用。
+
+    Returns:
+        {"content": str, "input_tokens": int, "output_tokens": int, "latency": float}
+    """
     return get_pool().call(messages, max_tokens, retries, multimodal=multimodal)
 
 
@@ -495,6 +546,31 @@ def analyze_image(image_path: str) -> str:
     return _call_api(messages, max_tokens=500, multimodal=True)
 
 
+# --- 性能统计全局计数器 ---
+
+_perf_stats = {
+    "api_calls": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_latency": 0.0,
+    "errors": 0,
+}
+
+def get_perf_stats() -> dict:
+    """获取当前会话的性能统计。"""
+    return _perf_stats.copy()
+
+def reset_perf_stats():
+    """重置性能统计。"""
+    _perf_stats.update({
+        "api_calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_latency": 0.0,
+        "errors": 0,
+    })
+
+
 def generate_summary(text: str) -> str:
     """对长文本生成摘要。"""
     if len(text) < 200:
@@ -510,7 +586,16 @@ def generate_summary(text: str) -> str:
         }
     ]
 
-    return _call_api(messages, max_tokens=300)
+    try:
+        result = _call_api(messages, max_tokens=300)
+        _perf_stats["api_calls"] += 1
+        _perf_stats["input_tokens"] += result.get("input_tokens", 0)
+        _perf_stats["output_tokens"] += result.get("output_tokens", 0)
+        _perf_stats["total_latency"] += result.get("latency", 0)
+        return result.get("content", "")
+    except Exception:
+        _perf_stats["errors"] += 1
+        raise
 
 
 def generate_tags(text: str) -> list[str]:
@@ -528,9 +613,18 @@ def generate_tags(text: str) -> list[str]:
         }
     ]
 
-    raw = _call_api(messages, max_tokens=100)
-    tags = [t.strip() for t in raw.replace("，", ",").split(",") if t.strip()]
-    return tags[:8]
+    try:
+        result = _call_api(messages, max_tokens=100)
+        _perf_stats["api_calls"] += 1
+        _perf_stats["input_tokens"] += result.get("input_tokens", 0)
+        _perf_stats["output_tokens"] += result.get("output_tokens", 0)
+        _perf_stats["total_latency"] += result.get("latency", 0)
+        raw = result.get("content", "")
+        tags = [t.strip() for t in raw.replace("，", ",").split(",") if t.strip()]
+        return tags[:8]
+    except Exception:
+        _perf_stats["errors"] += 1
+        raise
 
 
 # --- 日志分析 ---

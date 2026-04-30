@@ -92,6 +92,25 @@ def parse_with_retry(file_path: str, max_retries: int, retry_delay: int):
     return None, last_error
 
 
+def _update_frontmatter_tags(file_path: str, tags: list[str]):
+    """更新 Markdown 文件 frontmatter 中的 tags 字段。"""
+    if not tags:
+        return
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # 替换 tags 行：tags: [] -> tags: [tag1, tag2, ...]
+        tags_str = ", ".join(tags[:20])  # 最多 20 个标签
+        new_tags_line = f"tags: [{tags_str}]"
+        content = content.replace("tags: []", new_tags_line, 1)
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(content)
+    except Exception as e:
+        logger.warning(f"  更新标签失败 {file_path}: {e}")
+
+
 def archive_source(file_path: str, vault_path: str, archive_dir: str) -> str:
     """将原始文件归档到 Vault。"""
     archive_path = os.path.join(vault_path, archive_dir, os.path.basename(file_path))
@@ -128,7 +147,10 @@ def copy_images_to_vault(images: list[str], source_name: str, vault_path: str) -
 
 
 def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memory_store=None) -> dict:
-    """处理单个文件的完整流程。"""
+    """处理单个文件的完整流程。
+
+    所有异常均在内部捕获并返回 fail 状态，保证不会中断批量处理流程。
+    """
     from scripts.analyzer import AnalysisContext
     from scripts.classifier import classify
     from scripts.builder import MarkdownBuilder
@@ -137,9 +159,36 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
     fname = os.path.basename(file_path)
     safe_name = Path(fname).stem.replace(" ", "_")
 
+    # 用于清理：如果拆分模式下失败，移除半成品
+    cleanup_paths = []
+
+    try:
+        return _handle_file_impl(file_path, cfg, vault_path, scheduler, memory_store,
+                                 fname, safe_name, cleanup_paths)
+    except Exception as e:
+        logger.exception(f"  [EXCEPTION] {fname} 处理异常: {e}")
+        # 清理半成品
+        for p in cleanup_paths:
+            try:
+                if os.path.exists(p):
+                    os.remove(p)
+                    logger.info(f"  [CLEANUP] 移除半成品: {p}")
+            except Exception:
+                pass
+        return {"status": "fail", "error": f"{type(e).__name__}: {e}"}
+
+
+def _handle_file_impl(file_path, cfg, vault_path, scheduler, memory_store,
+                      fname, safe_name, cleanup_paths) -> dict:
+    """handle_file 的实际实现。"""
+    from scripts.analyzer import AnalysisContext
+    from scripts.classifier import classify
+    from scripts.builder import MarkdownBuilder
+    from scripts.parsers import get_parser
+
     # 1. 解析
     parse_result, error = parse_with_retry(
-        file_path, cfg["import"]["max_retries"], cfg["import"]["retry_delay"]
+        file_path, cfg["ai"].get("max_retries", 3), cfg["ai"].get("retry_delay", 1)
     )
     if parse_result is None:
         return {"status": "fail", "error": error}
@@ -150,7 +199,6 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
     logger.info(f"  提取: {text_count} 字符, {img_count} 张图片, {section_count} 个章节")
 
     # 2. AI 分析（自动选择短文档/长文档策略）
-    # 判断是否需要拆分大文档（提前决定）
     parse_section_count = len(parse_result.sections)
     parse_text_len = len(parse_result.text) if parse_result.text else 0
     split_sections = cfg["import"].get("split_threshold_sections", 5)
@@ -170,12 +218,12 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
             link_name = f"{date_str}-{safe_name}-{i+1:02d}-{safe_title}"
             section_links.append((link_name, title))
 
-        # 提前确定分类（用章节标题）
+        # 临时分类（后续会用 AI 分析后的摘要重新分类）
         classify_input = " ".join(s.title for s in parse_result.sections if s.title)[:300]
         categories = cfg["vault"].get("categories", ["其他"])
         category = classify(classify_input, categories) if classify_input else "其他"
 
-        # 先写索引文件
+        # 先写索引文件（tags 暂为空，后续回填）
         builder = MarkdownBuilder(fname, date_str)
         builder.add_frontmatter(category, [], source_path=file_path)
         builder.add_file_summary("")
@@ -183,22 +231,21 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
         os.makedirs(dest_dir, exist_ok=True)
         index_filename = f"{date_str}-{safe_name}.md"
         index_path = os.path.join(dest_dir, index_filename)
+        cleanup_paths.append(index_path)  # 失败时清理
         index_content = builder.build_index(section_links, source_path=file_path)
         with open(index_path, "w", encoding="utf-8") as f:
             f.write(index_content)
         logger.info(f"  [INDEX] {index_filename} ({len(section_links)} 个章节)")
 
-        # 流式分析：每章完成即写磁盘
+        # 流式分析：每章完成即写磁盘（tags 暂为空）
         parent_name = f"{date_str}-{safe_name}"
-        chapter_results = []  # 收集所有章节结果
+        chapter_paths_list = []  # 记录所有章节文件路径
 
         def on_section_done(index, total, section_result):
             """每章分析完成后立即写磁盘。"""
             title = section_result.get("title", f"第{index+1}章") or f"第{index+1}章"
             safe_title = title.replace(" ", "_").replace("/", "_").replace("\\", "_")
             link_name = f"{date_str}-{safe_name}-{index+1:02d}-{safe_title}"
-
-            chapter_results.append(section_result)
 
             chapter_content = builder.build_section_note(
                 section=section_result,
@@ -207,16 +254,43 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
                 source_path=file_path,
             )
             chapter_path = os.path.join(dest_dir, f"{link_name}.md")
+            cleanup_paths.append(chapter_path)  # 失败时清理
+            chapter_paths_list.append(chapter_path)
             with open(chapter_path, "w", encoding="utf-8") as f:
                 f.write(chapter_content)
             logger.info(f"  [OK] 章节 [{index+1}/{total}] {title} → {link_name}.md")
 
+        # 合并章节配置：每 5 页合并为一次 API 调用
+        chunk_size = cfg.get("performance", {}).get("chunk_size", 5)
+
         analysis = AnalysisContext().analyze(
             parse_result.text, parse_result.images, parse_result.sections,
-            scheduler=scheduler, callback=on_section_done
+            scheduler=scheduler, callback=on_section_done, chunk_size=chunk_size
         )
 
         logger.info(f"  AI 分析完成 (流式，共 {len(analysis.sections)} 章)")
+
+        # === AI 分析完成后，回填标签 ===
+        analysis_tags = analysis.tags if analysis.tags else []
+
+        # 重新分类（用 AI 摘要）
+        classify_input2 = ""
+        for sr in analysis.sections:
+            if sr.get("summary"):
+                classify_input2 += sr["summary"][:100] + " "
+        if classify_input2.strip():
+            category = classify(classify_input2, categories)
+
+        # 更新索引文件 frontmatter 标签
+        if analysis_tags:
+            _update_frontmatter_tags(index_path, analysis_tags)
+            logger.info(f"  索引文件标签已回填: {len(analysis_tags)} 个")
+
+        # 更新所有章节文件 frontmatter 标签
+        for cp in chapter_paths_list:
+            if os.path.exists(cp):
+                _update_frontmatter_tags(cp, analysis_tags)
+        logger.info(f"  章节文件标签已回填: {len(chapter_paths_list)} 个文件")
 
         # 归档原始文件
         archive_source(file_path, vault_path, cfg["import"]["archive_dir"])
@@ -283,6 +357,7 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
                 dest_path = os.path.join(dest_dir, f"{base}_{counter}{ext}")
                 counter += 1
 
+        cleanup_paths.append(dest_path)  # 失败时清理
         with open(dest_path, "w", encoding="utf-8") as f:
             f.write(builder.build())
 
@@ -310,6 +385,9 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
                 file_size=os.path.getsize(file_path),
                 word_count=text_count,
             )
+
+    # 成功时清空清理列表（不删除文件）
+    cleanup_paths.clear()
 
     return {
         "status": "ok",
@@ -528,12 +606,7 @@ def main():
 
         metrics.start_file(file_path)
 
-        try:
-            result = handle_file(file_path, cfg, vault_path, scheduler=scheduler, memory_store=memory_store)
-        except Exception as e:
-            # 捕获 handle_file 内部未处理的异常
-            result = {"status": "fail", "error": f"未处理异常: {type(e).__name__}: {e}"}
-            logger.exception(f"  [EXCEPTION] {fname}: {e}")
+        result = handle_file(file_path, cfg, vault_path, scheduler=scheduler, memory_store=memory_store)
 
         if result["status"] == "ok":
             logger.info(f"  [OK] {fname} → {result['path']}")
@@ -581,6 +654,23 @@ def main():
         # 日志分析（从日志文件中识别限流等问题）
         from scripts.ai_client import print_log_analysis
         print_log_analysis(log_file)
+
+        # 性能报告
+        from scripts.ai_client import get_perf_stats, reset_perf_stats
+        perf = get_perf_stats()
+        if perf["api_calls"] > 0:
+            avg_latency = perf["total_latency"] / perf["api_calls"]
+            total_tokens = perf["input_tokens"] + perf["output_tokens"]
+            logger.info(f"\n{'=' * 60}")
+            logger.info(f"  性能报告")
+            logger.info(f"{'=' * 60}")
+            logger.info(f"  API 调用次数:     {perf['api_calls']}")
+            logger.info(f"  Token 消耗:       {total_tokens:,} (输入: {perf['input_tokens']:,} + 输出: {perf['output_tokens']:,})")
+            logger.info(f"  AI 总耗时:        {perf['total_latency']:.1f}s")
+            logger.info(f"  API 平均延迟:     {avg_latency:.2f}s")
+            logger.info(f"  API 错误次数:     {perf['errors']}")
+            logger.info(f"{'=' * 60}\n")
+            reset_perf_stats()
     except Exception as e:
         # 确保即使报告生成失败也能保存指标
         try:

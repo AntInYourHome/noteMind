@@ -28,7 +28,11 @@
         "dedup": true,
         "dedup_index": ".notemind_index.json",
         "split_threshold_sections": 5,
-        "split_threshold_chars": 10000
+        "split_threshold_chars": 50000
+    },
+    "performance": {
+        "chunk_size": 5,
+        "report_enabled": true
     },
     "memory": {
         "enabled": true,
