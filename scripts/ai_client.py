@@ -370,10 +370,6 @@ _MAX_RETRIES = 3
 _BASE_DELAY = 1.0
 
 
-def _should_retry(status_code: int) -> bool:
-    return status_code in (429, 500, 502, 503, 504)
-
-
 def _call_with_provider(provider: dict, messages: list, max_tokens: int = 500, retries: int = None) -> str:
     api_key = provider.get("api_key", "")
     base_url = provider.get("base_url", _DEFAULT_PROVIDER["base_url"])
@@ -414,7 +410,7 @@ def _call_with_provider(provider: dict, messages: list, max_tokens: int = 500, r
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", errors="replace")
             last_error = RuntimeError(f"AI API 错误 ({e.code}): {body}")
-            if _should_retry(e.code) and attempt < max_retries:
+            if attempt < max_retries:
                 delay = _BASE_DELAY * (2 ** (attempt - 1)) + random.uniform(0, 1)
                 logger.warning(f"API 调用失败 (第 {attempt}/{max_retries} 次, 状态码: {e.code}), {delay:.1f}s 后重试...")
                 time.sleep(delay)
