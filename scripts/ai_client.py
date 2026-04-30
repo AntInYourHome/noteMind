@@ -1,6 +1,6 @@
 """
-NoteMind AI 客户端 — 纯标准库实现，零外部依赖
-使用 urllib 直接调用 qwen3.6-flash API
+NoteMind AI 客户端 — 多 Provider 轮询 + 并发调用
+纯标准库实现，支持配置多个 API Key 提高吞吐量
 """
 
 import base64
@@ -11,36 +11,122 @@ import random
 import time
 import urllib.request
 import urllib.error
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
 logger = logging.getLogger("notemind")
 
+
+# --- Provider 池 ---
+
+_DEFAULT_PROVIDER = {
+    "api_key_env": "QWEN_API_KEY",
+    "model": "qwen3.6-flash",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+}
+
+
+class APIProviderPool:
+    """管理多个 API provider，轮询分配请求。"""
+
+    def __init__(self, providers: list[dict] = None, concurrency: int = 5):
+        """
+        Args:
+            providers: 配置列表 [{"api_key": "...", "model": "...", "base_url": "..."}, ...]
+                      如果为 None，使用环境变量单 provider
+            concurrency: 最大并发数
+        """
+        if providers:
+            self.providers = providers
+        else:
+            key = os.environ.get("QWEN_API_KEY")
+            if not key:
+                raise ValueError("QWEN_API_KEY 环境变量未设置且未配置 providers")
+            self.providers = [_DEFAULT_PROVIDER.copy()]
+            self.providers[0]["api_key"] = key
+
+        self.concurrency = max(1, concurrency)
+        self._index = 0
+        self._lock = Lock()
+
+    def next_provider(self) -> dict:
+        """轮询获取下一个 provider。"""
+        with self._lock:
+            p = self.providers[self._index % len(self.providers)].copy()
+            self._index += 1
+            return p
+
+    def call(self, messages: list, max_tokens: int = 500, retries: int = 3) -> str:
+        """调用 API（使用下一个 provider）。"""
+        return _call_with_provider(self.next_provider(), messages, max_tokens, retries)
+
+    def batch_call(self, tasks: list[dict]) -> list:
+        """批量并发调用。
+
+        Args:
+            tasks: [{"messages": [...], "max_tokens": 500, "retries": 3}, ...]
+
+        Returns:
+            结果列表，与 tasks 顺序一致，失败项为 {"error": "..."}
+        """
+        results = [None] * len(tasks)
+
+        def run(idx: int, task: dict):
+            try:
+                return idx, self.call(task["messages"], task.get("max_tokens", 500), task.get("retries", 3))
+            except Exception as e:
+                return idx, {"error": str(e)}
+
+        with ThreadPoolExecutor(max_workers=self.concurrency) as pool:
+            futures = [pool.submit(run, i, t) for i, t in enumerate(tasks)]
+            for future in as_completed(futures):
+                idx, result = future.result()
+                results[idx] = result
+
+        return results
+
+
+# --- 全局单例（向后兼容） ---
+
+_pool: APIProviderPool | None = None
+_pool_lock = Lock()
+
+
+def init_pool(providers: list[dict] = None, concurrency: int = 5):
+    """初始化全局 provider 池。"""
+    global _pool
+    with _pool_lock:
+        if _pool is None:
+            _pool = APIProviderPool(providers, concurrency)
+
+
+def get_pool() -> APIProviderPool:
+    """获取全局 provider 池（懒加载）。"""
+    global _pool
+    with _pool_lock:
+        if _pool is None:
+            _pool = APIProviderPool()
+        return _pool
+
+
+# --- 底层调用 ---
+
 _MAX_RETRIES = 3
-_BASE_DELAY = 1.0  # 秒
-
-
-def _get_config() -> dict:
-    api_key = os.environ.get("QWEN_API_KEY")
-    if not api_key:
-        raise ValueError("QWEN_API_KEY 环境变量未设置")
-    return {
-        "api_key": api_key,
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "model": "qwen3.6-flash",
-    }
+_BASE_DELAY = 1.0
 
 
 def _should_retry(status_code: int) -> bool:
-    """判断是否应重试。"""
-    # 429 限流、5xx 服务器错误、503 服务不可用
     return status_code in (429, 500, 502, 503, 504)
 
 
-def _call_api(messages: list, max_tokens: int = 500, retries: int = None) -> str:
-    cfg = _get_config()
-    url = f"{cfg['base_url']}/chat/completions"
+def _call_with_provider(provider: dict, messages: list, max_tokens: int = 500, retries: int = None) -> str:
+    api_key = provider.get("api_key", "")
+    base_url = provider.get("base_url", _DEFAULT_PROVIDER["base_url"])
+    model = provider.get("model", _DEFAULT_PROVIDER["model"])
 
+    url = f"{base_url}/chat/completions"
     payload = json.dumps({
-        "model": cfg["model"],
+        "model": model,
         "messages": messages,
         "max_tokens": max_tokens,
     }).encode("utf-8")
@@ -50,7 +136,7 @@ def _call_api(messages: list, max_tokens: int = 500, retries: int = None) -> str
         data=payload,
         headers={
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {cfg['api_key']}",
+            "Authorization": f"Bearer {api_key}",
         },
         method="POST",
     )
@@ -91,6 +177,15 @@ def _call_api(messages: list, max_tokens: int = 500, retries: int = None) -> str
 
     raise last_error or RuntimeError("API 调用失败，已达最大重试次数")
 
+
+# --- 向后兼容的单调用接口 ---
+
+def _call_api(messages: list, max_tokens: int = 500, retries: int = None) -> str:
+    """向后兼容：使用全局 provider 池调用。"""
+    return get_pool().call(messages, max_tokens, retries)
+
+
+# --- 业务函数 ---
 
 def analyze_image(image_path: str) -> str:
     """分析图片内容，返回概要。"""

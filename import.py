@@ -127,7 +127,7 @@ def copy_images_to_vault(images: list[str], source_name: str, vault_path: str) -
     return vault_paths
 
 
-def handle_file(file_path: str, cfg: dict, vault_path: str) -> dict:
+def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memory_store=None) -> dict:
     """处理单个文件的完整流程。"""
     from scripts.analyzer import AnalysisContext
     from scripts.classifier import classify
@@ -152,8 +152,10 @@ def handle_file(file_path: str, cfg: dict, vault_path: str) -> dict:
     # 2. AI 分析（自动选择短文档/长文档策略）
     try:
         analysis = AnalysisContext().analyze(
-            parse_result.text, parse_result.images, parse_result.sections
+            parse_result.text, parse_result.images, parse_result.sections, scheduler=scheduler
         )
+        if scheduler:
+            logger.info(f"  AI 分析完成 (并发模式)")
     except Exception as e:
         return {"status": "fail", "error": f"AI 分析失败: {e}"}
 
@@ -222,6 +224,20 @@ def handle_file(file_path: str, cfg: dict, vault_path: str) -> dict:
         dedup_index = cfg["import"].get("dedup_index", ".notemind_index.json")
         md5 = compute_md5(file_path)
         add_to_index(file_path, md5, category, dest_path, vault_path, dedup_index)
+
+        # 9. 存储到文档记忆
+        if memory_store:
+            sections_summary = [{"title": s.get("title", ""), "summary": s.get("summary", "")} for s in analysis.sections]
+            memory_store.store_document(
+                doc_id=md5,
+                filename=fname,
+                category=category,
+                tags=analysis.tags,
+                summary=analysis.sections[0].get("summary", "")[:500] if analysis.sections else "",
+                sections=sections_summary,
+                file_size=os.path.getsize(file_path),
+                word_count=text_count,
+            )
 
     return {
         "status": "ok",
@@ -303,6 +319,39 @@ def main():
     if cfg.get("ai", {}).get("api_key"):
         os.environ["QWEN_API_KEY"] = cfg["ai"]["api_key"]
 
+    # 初始化多 Provider 池
+    ai_cfg = cfg.get("ai", {})
+    providers = ai_cfg.get("providers")
+
+    # 向后兼容：单 key 格式转 providers
+    if not providers and ai_cfg.get("api_key"):
+        providers = [{
+            "api_key": ai_cfg["api_key"],
+            "model": ai_cfg.get("model", "qwen3.6-flash"),
+            "base_url": ai_cfg.get("base_url", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+        }]
+        ai_cfg["providers"] = providers
+
+    concurrency = ai_cfg.get("concurrency", 5)
+    max_retries = ai_cfg.get("max_retries", 3)
+    retry_delay = ai_cfg.get("retry_delay", 1)
+    if providers:
+        from scripts.ai_client import APIProviderPool, init_pool
+        init_pool(providers, concurrency)
+        logger.info(f"AI Provider 池: {len(providers)} 个 Key, 并发: {concurrency}")
+    else:
+        logger.warning("未配置 providers，使用单 API Key（环境变量）")
+
+    # 初始化文档记忆
+    memory_cfg = cfg.get("memory", {})
+    memory_store = None
+    if memory_cfg.get("enabled", False):
+        from scripts.memory import MemoryStore
+        db_path = memory_cfg.get("db_path", ".notemind_memory.db")
+        memory_store = MemoryStore(db_path)
+        stats = memory_store.get_stats()
+        logger.info(f"文档记忆: {stats['documents']} 篇文档, {stats['unique_tags']} 个标签")
+
     source = os.path.realpath(args.source)
     if not os.path.isdir(source):
         logger.error(f"源目录不存在: {args.source}")
@@ -310,6 +359,14 @@ def main():
 
     init_vault(vault_path)
     logger.info(f"Vault 路径: {vault_path}")
+
+    # 初始化 Agent 调度器
+    scheduler = None
+    if providers:
+        from scripts.ai_client import get_pool
+        from scripts.agent_scheduler import AgentScheduler
+        scheduler = AgentScheduler(get_pool(), max_workers=concurrency)
+        logger.info(f"Agent 调度器: {concurrency} 工作线程")
 
     files = collect_files(source)
     if not files:
@@ -371,7 +428,7 @@ def main():
         metrics.start_file(file_path)
 
         try:
-            result = handle_file(file_path, cfg, vault_path)
+            result = handle_file(file_path, cfg, vault_path, scheduler=scheduler, memory_store=memory_store)
         except Exception as e:
             # 捕获 handle_file 内部未处理的异常
             result = {"status": "fail", "error": f"未处理异常: {type(e).__name__}: {e}"}

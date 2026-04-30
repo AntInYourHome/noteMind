@@ -1,8 +1,15 @@
 {
     "ai": {
-        "api_key": "sk-YOUR_API_KEY_HERE",
-        "model": "qwen3.6-flash",
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        "providers": [
+            {
+                "api_key": "sk-YOUR_API_KEY_1",
+                "model": "qwen3.6-flash",
+                "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            }
+        ],
+        "concurrency": 5,
+        "max_retries": 3,
+        "retry_delay": 1
     },
     "vault": {
         "path": "~/knowledge-base",
@@ -11,10 +18,12 @@
     "import": {
         "archive_dir": "_archive",
         "failed_dir": "_failed",
-        "max_retries": 3,
-        "retry_delay": 2,
         "dedup": true,
         "dedup_index": ".notemind_index.json"
+    },
+    "memory": {
+        "enabled": true,
+        "db_path": ".notemind_memory.db"
     },
     "logging": {
         "level": "INFO",

@@ -13,6 +13,8 @@ import.log
 .notemind_index.json
 .notemind_assets/
 config.json
+.notemind_gui_config.json
+.notemind_memory.db
 
 # demo / 测试产物
 test_demo/
