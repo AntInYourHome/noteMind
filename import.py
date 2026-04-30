@@ -150,89 +150,115 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
     logger.info(f"  提取: {text_count} 字符, {img_count} 张图片, {section_count} 个章节")
 
     # 2. AI 分析（自动选择短文档/长文档策略）
-    try:
-        analysis = AnalysisContext().analyze(
-            parse_result.text, parse_result.images, parse_result.sections, scheduler=scheduler
-        )
-        if scheduler:
-            logger.info(f"  AI 分析完成 (并发模式)")
-    except Exception as e:
-        return {"status": "fail", "error": f"AI 分析失败: {e}"}
-
-    # 3. 分类
-    classify_input = ""
-    for sr in analysis.sections:
-        if sr.get("summary"):
-            classify_input += sr["summary"][:100] + " "
-    if analysis.image_descriptions:
-        classify_input += analysis.image_descriptions[0][:200]
-
-    categories = cfg["vault"].get("categories", ["其他"])
-    category = classify(classify_input, categories)
-
-    # 4. 归档
-    archive_source(file_path, vault_path, cfg["import"]["archive_dir"])
-
-    # 5. 复制图片
-    vault_image_paths = []
-    if parse_result.images:
-        vault_image_paths = copy_images_to_vault(parse_result.images, safe_name, vault_path)
-        logger.info(f"  复制 {len(vault_image_paths)} 张图片到 Vault")
-
-    # 6. 构建 Markdown
-    date_str = datetime.now().strftime("%Y-%m-%d")
-    builder = MarkdownBuilder(fname, date_str)
-
-    # 判断是否需要拆分大文档
-    section_count = len(analysis.sections)
-    total_chars = sum(len(s.get("text", "")) for s in analysis.sections)
+    # 判断是否需要拆分大文档（提前决定）
+    parse_section_count = len(parse_result.sections)
+    parse_text_len = len(parse_result.text) if parse_result.text else 0
     split_sections = cfg["import"].get("split_threshold_sections", 5)
     split_chars = cfg["import"].get("split_threshold_chars", 10000)
-    should_split = section_count >= split_sections or total_chars > split_chars
+    should_split = parse_section_count >= split_sections or parse_text_len >= split_chars
 
     if should_split:
-        logger.info(f"  文档较大 ({section_count} 章节, {total_chars} 字符)，自动拆分为多文件")
+        # 大文档：流式分析，逐章输出即写磁盘
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        safe_name = Path(fname).stem.replace(" ", "_")
 
-        # 构建章节链接列表
+        # 先构建章节链接列表
         section_links = []
-        for i, sr in enumerate(analysis.sections):
-            title = sr.get("title", f"第{i+1}章")
+        for i, sec in enumerate(parse_result.sections):
+            title = sec.title or f"第{i+1}章"
             safe_title = title.replace(" ", "_").replace("/", "_").replace("\\", "_")
             link_name = f"{date_str}-{safe_name}-{i+1:02d}-{safe_title}"
             section_links.append((link_name, title))
 
-        # 写索引文件（主文档）
-        builder.add_frontmatter(category, analysis.tags, source_path=file_path)
-        first_summary = analysis.sections[0].get("summary", "") if analysis.sections else ""
-        builder.add_file_summary(first_summary)
+        # 提前确定分类（用章节标题）
+        classify_input = " ".join(s.title for s in parse_result.sections if s.title)[:300]
+        categories = cfg["vault"].get("categories", ["其他"])
+        category = classify(classify_input, categories) if classify_input else "其他"
 
+        # 先写索引文件
+        builder = MarkdownBuilder(fname, date_str)
+        builder.add_frontmatter(category, [], source_path=file_path)
+        builder.add_file_summary("")
         dest_dir = os.path.join(vault_path, category)
         os.makedirs(dest_dir, exist_ok=True)
         index_filename = f"{date_str}-{safe_name}.md"
         index_path = os.path.join(dest_dir, index_filename)
-
         index_content = builder.build_index(section_links, source_path=file_path)
         with open(index_path, "w", encoding="utf-8") as f:
             f.write(index_content)
         logger.info(f"  [INDEX] {index_filename} ({len(section_links)} 个章节)")
 
-        # 写每个章节文件
+        # 流式分析：每章完成即写磁盘
         parent_name = f"{date_str}-{safe_name}"
-        for i, (link_name, section_title) in enumerate(section_links):
-            sr = analysis.sections[i]
+        chapter_results = []  # 收集所有章节结果
+
+        def on_section_done(index, total, section_result):
+            """每章分析完成后立即写磁盘。"""
+            title = section_result.get("title", f"第{index+1}章") or f"第{index+1}章"
+            safe_title = title.replace(" ", "_").replace("/", "_").replace("\\", "_")
+            link_name = f"{date_str}-{safe_name}-{index+1:02d}-{safe_title}"
+
+            chapter_results.append(section_result)
+
             chapter_content = builder.build_section_note(
-                section=sr,
+                section=section_result,
                 parent_name=parent_name,
-                tags=analysis.tags,
+                tags=[],
                 source_path=file_path,
             )
             chapter_path = os.path.join(dest_dir, f"{link_name}.md")
             with open(chapter_path, "w", encoding="utf-8") as f:
                 f.write(chapter_content)
+            logger.info(f"  [OK] 章节 [{index+1}/{total}] {title} → {link_name}.md")
 
-        dest_path = index_path  # 返回索引文件路径
+        analysis = AnalysisContext().analyze(
+            parse_result.text, parse_result.images, parse_result.sections,
+            scheduler=scheduler, callback=on_section_done
+        )
+
+        logger.info(f"  AI 分析完成 (流式，共 {len(analysis.sections)} 章)")
+
+        # 归档原始文件
+        archive_source(file_path, vault_path, cfg["import"]["archive_dir"])
+
+        # 复制图片
+        vault_image_paths = []
+        if parse_result.images:
+            vault_image_paths = copy_images_to_vault(parse_result.images, safe_name, vault_path)
+            logger.info(f"  复制 {len(vault_image_paths)} 张图片到 Vault")
+
     else:
-        # 短文档：单文件输出
+        # 短文档：原有逻辑不变
+        analysis = AnalysisContext().analyze(
+            parse_result.text, parse_result.images, parse_result.sections, scheduler=scheduler
+        )
+        if scheduler:
+            logger.info(f"  AI 分析完成 (并发模式)")
+
+        # 3. 分类
+        classify_input = ""
+        for sr in analysis.sections:
+            if sr.get("summary"):
+                classify_input += sr["summary"][:100] + " "
+        if analysis.image_descriptions:
+            classify_input += analysis.image_descriptions[0][:200]
+
+        categories = cfg["vault"].get("categories", ["其他"])
+        category = classify(classify_input, categories)
+
+        # 4. 归档
+        archive_source(file_path, vault_path, cfg["import"]["archive_dir"])
+
+        # 5. 复制图片
+        vault_image_paths = []
+        if parse_result.images:
+            vault_image_paths = copy_images_to_vault(parse_result.images, safe_name, vault_path)
+            logger.info(f"  复制 {len(vault_image_paths)} 张图片到 Vault")
+
+        # 6. 构建 Markdown（短文档：单文件输出）
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        safe_name = Path(fname).stem.replace(" ", "_")
+        builder = MarkdownBuilder(fname, date_str)
         builder.add_frontmatter(category, analysis.tags, source_path=file_path).add_title()
 
         if len(analysis.sections) == 1 and not analysis.sections[0].get("title"):
@@ -259,6 +285,10 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
 
         with open(dest_path, "w", encoding="utf-8") as f:
             f.write(builder.build())
+
+    # 拆分模式下 dest_path 用索引文件路径
+    if should_split:
+        dest_path = index_path
 
     # 8. 更新去重索引
     if cfg["import"].get("dedup", True):

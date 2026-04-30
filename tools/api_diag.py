@@ -122,7 +122,14 @@ def test_single_call(provider: dict, prompt_key: str = "summary", timeout: int =
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             elapsed = time.time() - start
             data = json.loads(resp.read().decode("utf-8"))
-            content = data["choices"][0]["message"]["content"].strip()
+            choices = data.get("choices")
+            if not choices:
+                raise RuntimeError(f"API 返回空 choices: {data}")
+            message = choices[0].get("message")
+            if not message:
+                raise RuntimeError(f"API 返回空 message: {data}")
+            content = message.get("content", "")
+            content = content.strip() if content else "[空响应]"
             usage = data.get("usage", {})
             return {
                 "success": True,

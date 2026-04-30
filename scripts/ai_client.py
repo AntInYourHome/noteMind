@@ -35,7 +35,7 @@ _DEFAULT_PROVIDER = {
 class ProviderHealthTracker:
     """追踪单个 provider 的健康状态。"""
 
-    # 连续 429 次数达到此阈值时，标记为降级（本轮不再使用）
+    # 连续 429 次数达到此阈值时，进入长冷却（5 分钟）
     DEGRADATION_THRESHOLD = 3
 
     def __init__(self, provider: dict):
@@ -47,14 +47,13 @@ class ProviderHealthTracker:
         self.last_error: str | None = None
         self.last_success_time: float | None = None
         self.last_error_time: float | None = None
-        self.circuit_open_until: float = 0  # 熔断器冷却截止时间
-        self.degraded = False  # 永久降级标记
+        self.circuit_open_until: float = 0  # 冷却截止时间
 
     def record_success(self):
         self.success_count += 1
         self.last_success_time = time.time()
         self.consecutive_429 = 0  # 成功后重置连续计数
-        self.circuit_open_until = 0  # 重置熔断
+        self.circuit_open_until = 0  # 重置冷却
 
     def record_failure(self, error: str, is_rate_limit: bool = False):
         self.failure_count += 1
@@ -63,25 +62,21 @@ class ProviderHealthTracker:
         if is_rate_limit:
             self.rate_limit_count += 1
             self.consecutive_429 += 1
-            # 达到降级阈值：永久移除
+            # 达到阈值：5 分钟长冷却
             if self.consecutive_429 >= self.DEGRADATION_THRESHOLD:
-                self.degraded = True
+                cool = 300  # 5 分钟
                 model = self.provider.get('model', '?')
                 logger.warning(
                     f"[降级] Provider {model} 连续 429 {self.consecutive_429} 次，"
-                    f"已移出可用池"
+                    f"进入长冷却 {cool}s"
                 )
             else:
-                # 未达阈值：30 秒冷却
-                self.circuit_open_until = time.time() + 30
+                cool = 30  # 普通 30 秒冷却
+            self.circuit_open_until = time.time() + cool
 
     def is_available(self) -> bool:
-        """是否可用（未被熔断且未降级）。"""
-        if self.degraded:
-            return False
-        if time.time() < self.circuit_open_until:
-            return False
-        return True
+        """是否可用（未处于冷却中）。"""
+        return time.time() >= self.circuit_open_until
 
     def health_score(self) -> float:
         """健康评分 0.0-1.0。"""
@@ -93,10 +88,10 @@ class ProviderHealthTracker:
         return max(0.0, success_rate - rate_limit_penalty)
 
     def status_label(self) -> str:
-        if self.degraded:
-            return f"已降级 (连续429×{self.consecutive_429}，移出)"
         if not self.is_available():
             remaining = int(self.circuit_open_until - time.time())
+            if remaining > 60:
+                return f"长冷却 ({remaining // 60}m{remaining % 60}s)"
             return f"冷却中 ({remaining}s)"
         score = self.health_score()
         total = self.success_count + self.failure_count
@@ -259,7 +254,6 @@ class APIProviderPool:
                 "success": tracker.success_count,
                 "failure": tracker.failure_count,
                 "rate_limits": tracker.rate_limit_count,
-                "degraded": tracker.degraded,
                 "available": tracker.is_available(),
             })
         return health
@@ -269,24 +263,22 @@ class APIProviderPool:
         health = self.get_provider_health()
         if not health:
             return
+        cooling_count = sum(1 for h in health if not h["available"])
+        mm_count = sum(1 for h in health if h["multimodal"])
+        mm_available = sum(1 for h in health if h["multimodal"] and h["available"])
         logger.info("=" * 60)
         logger.info("NoteMind Provider 健康报告")
         logger.info("=" * 60)
-        degraded_count = sum(1 for h in health if h["degraded"])
-        mm_count = sum(1 for h in health if h["multimodal"])
-        mm_available = sum(1 for h in health if h["multimodal"] and h["available"])
         logger.info(
-            f"  总数: {len(health)} | 多模态: {mm_available}/{mm_count} | "
-            f"已降级: {degraded_count} | 当前并发: {self.concurrency}"
+            f"  总数: {len(health)} | 多模态可用: {mm_available}/{mm_count} | "
+            f"冷却中: {cooling_count} | 当前并发: {self.concurrency}"
         )
         logger.info("-" * 60)
         for h in health:
-            if h["degraded"]:
-                icon = "⬇️"
-            elif h["available"]:
+            if h["available"]:
                 icon = "✅"
             else:
-                icon = "⛔"
+                icon = "⏳"
             mm_tag = " [多模态]" if h["multimodal"] else ""
             logger.info(
                 f"  {icon} {h['model']}{mm_tag} | 评分: {h['score']:.2f} | "
@@ -312,7 +304,6 @@ class APIProviderPool:
             tracker.consecutive_429 = 0
             tracker.last_error = None
             tracker.circuit_open_until = 0
-            tracker.degraded = False
         self._degraded_mode = False
         self.concurrency = self._original_concurrency
         self._total_429_count = 0
@@ -380,7 +371,14 @@ def _call_with_provider(provider: dict, messages: list, max_tokens: int = 500, r
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-                return data["choices"][0]["message"]["content"].strip()
+                choices = data.get("choices")
+                if not choices:
+                    raise RuntimeError(f"API 返回空 choices: {data}")
+                message = choices[0].get("message")
+                if not message:
+                    raise RuntimeError(f"API 返回空 message: {data}")
+                content = message.get("content", "")
+                return content.strip() if content else "[空响应]"
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", errors="replace")
             last_error = RuntimeError(f"AI API 错误 ({e.code}): {body}")
