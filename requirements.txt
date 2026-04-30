@@ -1,0 +1,10 @@
+# NoteMind — 零外部依赖（纯 Python 标准库）
+# 所有核心功能仅需 Python 3.10+
+
+# 可选依赖：按需安装
+# pip install pymupdf         # PDF 解析
+# pip install python-docx     # Word 解析
+# pip install python-pptx     # PPT 解析
+# pip install openpyxl        # Excel 解析
+# pip install mistune         # Markdown 格式清洗
+# pip install onenote2xml     # OneNote 解析

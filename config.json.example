@@ -1,0 +1,24 @@
+{
+    "ai": {
+        "api_key": "sk-YOUR_API_KEY_HERE",
+        "model": "qwen3.6-flash",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    },
+    "vault": {
+        "path": "~/knowledge-base",
+        "categories": ["芯片", "安全", "项目", "笔记", "其他"]
+    },
+    "import": {
+        "archive_dir": "_archive",
+        "failed_dir": "_failed",
+        "max_retries": 3,
+        "retry_delay": 2,
+        "dedup": true,
+        "dedup_index": ".notemind_index.json"
+    },
+    "logging": {
+        "level": "INFO",
+        "file": "logs/import.log",
+        "log_dir": "logs"
+    }
+}

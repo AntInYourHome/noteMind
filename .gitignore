@@ -1,0 +1,33 @@
+# NoteMind 项目
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# 运行时生成文件
+logs/
+import.log
+.notemind_index.json
+.notemind_assets/
+config.json
+
+# demo / 测试产物
+test_demo/
+demo_vault/
+test_vault/
+test_vault2/
+test_source/
+test_source2/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
