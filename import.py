@@ -202,7 +202,7 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
             section_links.append((link_name, title))
 
         # 写索引文件（主文档）
-        builder.add_frontmatter(category, analysis.tags)
+        builder.add_frontmatter(category, analysis.tags, source_path=file_path)
         first_summary = analysis.sections[0].get("summary", "") if analysis.sections else ""
         builder.add_file_summary(first_summary)
 
@@ -211,7 +211,7 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
         index_filename = f"{date_str}-{safe_name}.md"
         index_path = os.path.join(dest_dir, index_filename)
 
-        index_content = builder.build_index(section_links)
+        index_content = builder.build_index(section_links, source_path=file_path)
         with open(index_path, "w", encoding="utf-8") as f:
             f.write(index_content)
         logger.info(f"  [INDEX] {index_filename} ({len(section_links)} 个章节)")
@@ -224,6 +224,7 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
                 section=sr,
                 parent_name=parent_name,
                 tags=analysis.tags,
+                source_path=file_path,
             )
             chapter_path = os.path.join(dest_dir, f"{link_name}.md")
             with open(chapter_path, "w", encoding="utf-8") as f:
@@ -232,7 +233,7 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
         dest_path = index_path  # 返回索引文件路径
     else:
         # 短文档：单文件输出
-        builder.add_frontmatter(category, analysis.tags).add_title()
+        builder.add_frontmatter(category, analysis.tags, source_path=file_path).add_title()
 
         if len(analysis.sections) == 1 and not analysis.sections[0].get("title"):
             builder.add_file_summary(analysis.sections[0].get("summary", ""))
@@ -542,6 +543,14 @@ def main():
             logger.info(f"指标报告已保存: {report_path}")
 
         metrics.print_summary(logger)
+
+        # Provider 健康报告（多模型配置时）
+        if scheduler and scheduler.pool:
+            scheduler.pool.print_health_report()
+
+        # 日志分析（从日志文件中识别限流等问题）
+        from scripts.ai_client import print_log_analysis
+        print_log_analysis(log_file)
     except Exception as e:
         # 确保即使报告生成失败也能保存指标
         try:

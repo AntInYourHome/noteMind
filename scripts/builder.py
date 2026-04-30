@@ -15,18 +15,26 @@ class MarkdownBuilder:
         self.date_str = date_str or datetime.now().strftime("%Y-%m-%d")
         self.parts = []
 
-    def add_frontmatter(self, category: str, tags: list[str]) -> "MarkdownBuilder":
-        """添加 YAML frontmatter。"""
+    def add_frontmatter(self, category: str, tags: list[str], source_path: str = None) -> "MarkdownBuilder":
+        """添加 YAML frontmatter。
+
+        Args:
+            category: 分类
+            tags: 标签列表
+            source_path: 原始文件的完整路径（用于溯源）
+        """
         self._category = category
         self._tags = tags
         tags_str = ", ".join(tags)
-        self.parts.append(f"""---
-source: {self.source_name}
-date: {self.date_str}
-category: {category}
-tags: [{tags_str}]
----
-""")
+        frontmatter_lines = [
+            f"source: {self.source_name}",
+            f"date: {self.date_str}",
+            f"category: {category}",
+            f"tags: [{tags_str}]",
+        ]
+        if source_path:
+            frontmatter_lines.append(f"original_path: {source_path}")
+        self.parts.append("---\n" + "\n".join(frontmatter_lines) + "\n---\n")
         return self
 
     def add_title(self) -> "MarkdownBuilder":
@@ -90,24 +98,27 @@ tags: [{tags_str}]
         """返回最终 Markdown 字符串。"""
         return "\n".join(self.parts)
 
-    def build_index(self, section_links: list[tuple[str, str]]) -> str:
+    def build_index(self, section_links: list[tuple[str, str]], source_path: str = None) -> str:
         """构建索引文件（主文档：仅摘要 + 章节链接）。
 
         Args:
             section_links: [(章节文件名（不含.md）, 章节标题), ...]
+            source_path: 原始文件的完整路径
         """
         parts = []
         # frontmatter
         tags_str = ", ".join(self._tags if hasattr(self, '_tags') else [])
-        parts.append(f"""---
-source: {self.source_name}
-date: {self.date_str}
-category: {self._category if hasattr(self, '_category') else "其他"}
-tags: [{tags_str}]
-doc_type: index
-sections: {len(section_links)}
----
-""")
+        fm_lines = [
+            f"source: {self.source_name}",
+            f"date: {self.date_str}",
+            f"category: {self._category if hasattr(self, '_category') else '其他'}",
+            f"tags: [{tags_str}]",
+            "doc_type: index",
+            f"sections: {len(section_links)}",
+        ]
+        if source_path:
+            fm_lines.append(f"original_path: {source_path}")
+        parts.append("---\n" + "\n".join(fm_lines) + "\n---\n")
         # 标题
         title = Path(self.source_name).stem
         parts.append(f"# {title}\n")
@@ -125,7 +136,8 @@ sections: {len(section_links)}
         return "\n".join(parts)
 
     def build_section_note(self, section: dict, parent_name: str, tags: list[str] = None,
-                           image_descriptions: list[str] = None, image_index: int = 0) -> str:
+                           image_descriptions: list[str] = None, image_index: int = 0,
+                           source_path: str = None) -> str:
         """构建单个章节独立笔记文件。
 
         Args:
@@ -134,17 +146,20 @@ sections: {len(section_links)}
             tags: 该章节的标签
             image_descriptions: 该章节对应的图片描述
             image_index: 图片起始索引
+            source_path: 原始文件的完整路径
         """
         parts = []
         tags_str = ", ".join(tags) if tags else ""
-        parts.append(f"""---
-source: {self.source_name}
-date: {self.date_str}
-category: {self._category if hasattr(self, '_category') else "其他"}
-tags: [{tags_str}]
-parent: {parent_name}
----
-""")
+        fm_lines = [
+            f"source: {self.source_name}",
+            f"date: {self.date_str}",
+            f"category: {self._category if hasattr(self, '_category') else '其他'}",
+            f"tags: [{tags_str}]",
+            f"parent: {parent_name}",
+        ]
+        if source_path:
+            fm_lines.append(f"original_path: {source_path}")
+        parts.append("---\n" + "\n".join(fm_lines) + "\n---\n")
         # 章节标题
         if section.get("title"):
             parts.append(f"# {section['title']}\n")
