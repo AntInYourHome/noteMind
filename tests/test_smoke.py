@@ -52,7 +52,12 @@ def test_config_loads():
     with open(cfg_path, "r") as f:
         cfg = json.load(f)
     check("JSON 格式正确", "ai" in cfg and "vault" in cfg and "import" in cfg)
-    check("API key 已配置", cfg["ai"]["api_key"].startswith("sk-"))
+    # 支持两种 config 格式：旧版 api_key 直接放在 ai 下，新版在 providers 数组中
+    providers = cfg["ai"].get("providers", [])
+    has_api_key = cfg["ai"].get("api_key", "").startswith("sk-")
+    if providers:
+        has_api_key = any(p.get("api_key", "").startswith("sk-") for p in providers)
+    check("API key 已配置", has_api_key)
     check("分类列表非空", len(cfg["vault"]["categories"]) > 0)
 
 
@@ -105,16 +110,16 @@ def test_parsers_text():
         with open(txt, "w") as f:
             f.write("这是一段测试文本\n包含多行内容")
         result = parse_text(txt)
-        check("纯文本解析", "测试文本" in result)
+        check("纯文本解析", "测试文本" in result.text)
 
         # Markdown
         md = os.path.join(source, "test.md")
         with open(md, "w") as f:
             f.write("# 标题\n\n这是一段**粗体**文本\n\n- 列表项1\n- 列表项2\n\n[链接](http://example.com)")
         result = parse_markdown(md)
-        check("Markdown 解析", "粗体文本" in result and "列表项" in result)
-        check("Markdown 链接被清洗", "http://" not in result)
-        check("Markdown 粗体标记被去除", "**" not in result)
+        check("Markdown 解析", "粗体文本" in result.text and "列表项" in result.text)
+        check("Markdown 链接被清洗", "http://" not in result.text)
+        check("Markdown 粗体标记被去除", "**" not in result.text)
 
         # 格式识别
         check("图片格式识别", get_parser("test.jpg") == "image")

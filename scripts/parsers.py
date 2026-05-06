@@ -6,6 +6,10 @@ NoteMind 格式解析器 — 统一返回 {text, images, sections} 结构
 import os
 import re
 import tempfile
+from threading import Lock
+
+# 智能 OCR 阈值：每页平均字符数低于此值时才 OCR 图片
+OCR_CHAR_THRESHOLD_PER_PAGE = 100
 
 
 class Section:
@@ -18,10 +22,12 @@ class Section:
 
 class ParseResult:
     """解析结果：全文 + 提取的图片 + 结构化章节。"""
-    def __init__(self, text: str = "", images: list[str] = None, sections: list = None):
+    def __init__(self, text: str = "", images: list[str] = None, sections: list = None,
+                 image_ocr_texts: list[str] = None):
         self.text = text or ""
         self.images = images or []
         self.sections = sections or []
+        self.image_ocr_texts = image_ocr_texts or []
 
     @property
     def has_content(self):
@@ -34,61 +40,107 @@ class ParseResult:
         return len(self.text) >= threshold
 
 
+def _ocr_image(file_path: str) -> str:
+    """对单张图片做 OCR，返回提取的文本。"""
+    ocr = _get_ocr_instance()
+    if ocr is None:
+        return ""
+    try:
+        result, _ = ocr(file_path)
+        if result:
+            return "\n".join(line[1] for line in result if len(line) >= 2)
+    except Exception:
+        pass
+    return ""
+
+
+def _should_ocr_images(text: str, page_count: int, image_count: int) -> bool:
+    """判断是否需要对图片做 OCR。文字为主的文档跳过 OCR。"""
+    if image_count == 0:
+        return False
+    chars_per_page = len(text.strip()) / max(page_count, 1)
+    return chars_per_page < OCR_CHAR_THRESHOLD_PER_PAGE
+
+
 def parse_pdf(file_path: str) -> ParseResult:
-    """PDF → 文字 + 图片 + 按页面/章节拆分"""
+    """PDF → 文字 + 图片 + 按页面/章节拆分（智能 OCR）"""
     try:
         import fitz
         doc = fitz.open(file_path)
         text_parts = []
-        images = []
-        sections = []
-        section_texts = []
+        all_images = []
+        page_data = []  # [(page_text, [img_paths])]
 
+        # Pass 1: 提取文字 + 保存图片（不做 OCR）
         for page_num, page in enumerate(doc, 1):
             page_text = page.get_text()
             text_parts.append(page_text)
-            section_texts.append(page_text)
-
-            # 提取图片
             page_images = []
+
             for img_info in page.get_images(full=True):
                 xref = img_info[0]
                 base_image = doc.extract_image(xref)
                 if base_image:
                     ext = base_image["ext"]
-                    img_bytes = base_image["image"]
                     img_path = os.path.join(
                         tempfile.gettempdir(),
                         f"pdf_p{page_num}_{xref}.{ext}"
                     )
                     with open(img_path, "wb") as f:
-                        f.write(img_bytes)
-                    images.append(img_path)
+                        f.write(img_bytes := base_image["image"])
+                    all_images.append(img_path)
                     page_images.append(img_path)
 
-            sections.append(Section(f"第 {page_num} 页", page_text.strip(), page_images))
+            page_data.append((page_text.strip(), page_images))
 
         doc.close()
+
+        # 判断是否需要 OCR
         full_text = "\n\n".join(text_parts)
-        return ParseResult(full_text, images, sections)
+        do_ocr = _should_ocr_images(full_text, len(page_data), len(all_images))
+
+        # Pass 2: 构建章节，条件 OCR
+        sections = []
+        all_image_ocr = []
+
+        for page_num, (page_text, page_images) in enumerate(page_data, 1):
+            page_image_ocr_texts = []
+            if do_ocr:
+                for img_path in page_images:
+                    ocr_text = _ocr_image(img_path)
+                    page_image_ocr_texts.append(ocr_text)
+                    all_image_ocr.append(ocr_text)
+
+            page_content = page_text
+            ocr_combined = "\n".join(t for t in page_image_ocr_texts if t)
+            if ocr_combined:
+                page_content = f"{page_text}\n\n[图片内容识别]\n{ocr_combined}" if page_text else ocr_combined
+
+            sections.append(Section(f"第 {page_num} 页", page_content, page_images))
+
+        return ParseResult(full_text, all_images, sections, all_image_ocr)
     except ImportError:
         return ParseResult("", [])
 
 
 def parse_docx(file_path: str) -> ParseResult:
-    """Word (.docx) → 文字 + 内嵌图片 + 按标题拆分章节"""
+    """Word (.docx) → 文字 + 内嵌图片 + 按标题拆分章节（智能 OCR）"""
     try:
         from docx import Document
-        from docx.enum.text import WD_ALIGN_PARAGRAPH
         doc = Document(file_path)
-        sections = []
         images = []
-        current_title = None
-        current_text = []
-        current_images = []
-
-        # 先提取所有内嵌图片
+        all_image_ocr = []
         img_dir = tempfile.mkdtemp(prefix="docx_imgs_")
+
+        # Pass 1: 提取文字 + 保存图片（不做 OCR）
+        paragraphs_text = []
+        for para in doc.paragraphs:
+            if para.text.strip():
+                paragraphs_text.append(para.text)
+
+        full_text = "\n".join(paragraphs_text)
+
+        # 提取图片
         rels = doc.part.rels
         for rel in rels:
             if "image" in rels[rel].reltype:
@@ -101,8 +153,24 @@ def parse_docx(file_path: str) -> ParseResult:
                     f.write(image.blob)
                 images.append(img_path)
 
+        # 判断是否需要 OCR
+        # DOCX 没有明确页数，用段落数估算
+        page_estimate = max(len([p for p in doc.paragraphs if p.style and "heading" in p.style.name.lower()]), 1)
+        do_ocr = _should_ocr_images(full_text, page_estimate, len(images))
+
+        # 条件 OCR
+        if do_ocr:
+            for img_path in images:
+                ocr_text = _ocr_image(img_path)
+                all_image_ocr.append(ocr_text)
+
+        # Pass 2: 按标题拆分章节
+        sections = []
+        current_title = None
+        current_text = []
+        current_images = []
+
         for para in doc.paragraphs:
-            # 判断是否为标题（居中、加粗、大字号）
             is_heading = False
             try:
                 style_name = para.style.name.lower() if para.style else ""
@@ -112,7 +180,8 @@ def parse_docx(file_path: str) -> ParseResult:
                 pass
 
             if is_heading and current_text:
-                sections.append(Section(current_title or "概述", "\n".join(current_text), current_images))
+                sec = Section(current_title or "概述", "\n".join(current_text), current_images)
+                sections.append(sec)
                 current_text = []
                 current_images = []
                 current_title = para.text.strip()
@@ -136,36 +205,35 @@ def parse_docx(file_path: str) -> ParseResult:
         if current_text:
             sections.append(Section(current_title or "概述", "\n".join(current_text), current_images))
 
-        # 如果没有章节，返回全文
         if not sections:
-            full_text = "\n\n".join([p.text for p in doc.paragraphs if p.text.strip()])
-            return ParseResult(full_text, images, [])
+            return ParseResult(full_text, images, [], all_image_ocr)
 
-        full_text = "\n\n".join([s.text for s in sections])
-        return ParseResult(full_text, images, sections)
+        full_text_sections = "\n\n".join([s.text for s in sections])
+        return ParseResult(full_text_sections, images, sections, all_image_ocr)
     except ImportError:
         return ParseResult("", [])
 
 
 def parse_pptx(file_path: str) -> ParseResult:
-    """PPT (.pptx) → 逐页文字 + 每页图片 + 每页作为一节"""
+    """PPT (.pptx) → 逐页文字 + 每页图片（智能 OCR）+ 每页作为一节"""
     try:
         from pptx import Presentation
         prs = Presentation(file_path)
-        sections = []
-        images = []
+        all_images = []
+        slide_data = []  # [(slide_text, [img_paths])]
         img_dir = tempfile.mkdtemp(prefix="pptx_imgs_")
 
+        # Pass 1: 提取文字 + 保存图片（不做 OCR）
         for i, slide in enumerate(prs.slides, 1):
-            slide_text = []
+            slide_text_parts = []
+            slide_images = []
 
             for shape in slide.shapes:
                 if shape.has_text_frame:
                     for para in shape.text_frame.paragraphs:
                         if para.text.strip():
-                            slide_text.append(para.text.strip())
+                            slide_text_parts.append(para.text.strip())
 
-                # 提取图片
                 try:
                     from pptx.enum.shapes import MSO_SHAPE_TYPE
                     if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
@@ -174,18 +242,38 @@ def parse_pptx(file_path: str) -> ParseResult:
                         img_path = os.path.join(img_dir, f"slide{i}_{shape.shape_id}.{ext}")
                         with open(img_path, "wb") as f:
                             f.write(image.blob)
-                        images.append(img_path)
-                        # 将该图片关联到对应章节
+                        all_images.append(img_path)
+                        slide_images.append(img_path)
                 except Exception:
                     pass
 
-            text = "\n".join(slide_text)
-            if text or images:
-                sections.append(Section(f"幻灯片 {i}", text, [img for img in images if img_path.endswith(str(i))]))
+            slide_data.append(("\n".join(slide_text_parts), slide_images))
 
-        # 简化：所有图片归到全文，sections 按页拆分文字
-        full_text = "\n\n".join([s.text for s in sections])
-        return ParseResult(full_text, images, sections)
+        full_text = "\n\n".join(sd[0] for sd in slide_data if sd[0])
+
+        # 判断是否需要 OCR
+        do_ocr = _should_ocr_images(full_text, len(slide_data), len(all_images))
+
+        # Pass 2: 构建章节，条件 OCR
+        sections = []
+        all_image_ocr = []
+
+        for i, (text, slide_images) in enumerate(slide_data, 1):
+            slide_image_ocr = []
+            if do_ocr:
+                for img_path in slide_images:
+                    ocr_text = _ocr_image(img_path)
+                    slide_image_ocr.append(ocr_text)
+                    all_image_ocr.append(ocr_text)
+
+            ocr_combined = "\n".join(t for t in slide_image_ocr if t)
+            if ocr_combined:
+                text = f"{text}\n\n[图片内容识别]\n{ocr_combined}" if text else ocr_combined
+
+            if text or slide_images:
+                sections.append(Section(f"幻灯片 {i}", text, slide_images))
+
+        return ParseResult(full_text, all_images, sections, all_image_ocr)
     except ImportError:
         return ParseResult("", [])
 
@@ -219,7 +307,7 @@ def parse_excel(file_path: str) -> ParseResult:
 
 
 def parse_markdown(file_path: str) -> ParseResult:
-    """Markdown → 纯文本 + 本地图片 + 按 ## 标题拆分章节"""
+    """Markdown → 纯文本 + 本地图片（智能 OCR）+ 按 ## 标题拆分章节"""
     with open(file_path, "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -234,14 +322,23 @@ def parse_markdown(file_path: str) -> ParseResult:
             if os.path.exists(full_path):
                 images.append(full_path)
 
+    # 清洗全文
+    text = _clean_markdown(content)
+
+    # 判断是否需要 OCR
+    do_ocr = _should_ocr_images(text, 1, len(images))
+    all_image_ocr = []
+    if do_ocr:
+        for img_path in images:
+            ocr_text = _ocr_image(img_path)
+            all_image_ocr.append(ocr_text)
+
     # 按 ## 标题拆分章节
     sections = []
-    # 匹配 ## 或 ### 标题
     heading_pattern = r'^(#{1,6})\s+(.+)$'
     parts = re.split(heading_pattern, content, flags=re.MULTILINE)
 
     if len(parts) > 3:
-        # 有标题结构
         current_title = None
         current_text = []
         current_images = []
@@ -249,7 +346,6 @@ def parse_markdown(file_path: str) -> ParseResult:
         i = 0
         while i < len(parts):
             if parts[i].startswith("#"):
-                # 新章节
                 if current_text:
                     clean = _clean_markdown("".join(current_text))
                     if clean.strip():
@@ -259,7 +355,6 @@ def parse_markdown(file_path: str) -> ParseResult:
                 current_images = []
                 i += 2
             else:
-                # 找图片
                 for m in re.finditer(img_pattern, parts[i]):
                     img_p = m.group(1)
                     if not img_p.startswith(("http://", "https://", "data:")):
@@ -275,9 +370,7 @@ def parse_markdown(file_path: str) -> ParseResult:
             if clean.strip():
                 sections.append(Section(current_title or "概述", clean, current_images))
 
-    # 清洗全文
-    text = _clean_markdown(content)
-    return ParseResult(text.strip(), images, sections)
+    return ParseResult(text.strip(), images, sections, all_image_ocr)
 
 
 def _clean_markdown(content: str) -> str:
@@ -294,9 +387,41 @@ def _clean_markdown(content: str) -> str:
     return text.strip()
 
 
+# --- OCR 引擎（全局单例，懒加载） ---
+
+_ocr_instance = None
+_ocr_lock = Lock()
+
+
+def _get_ocr_instance():
+    """获取全局 OCR 实例（线程安全，懒加载）。"""
+    global _ocr_instance
+    if _ocr_instance is not None:
+        return _ocr_instance
+    with _ocr_lock:
+        if _ocr_instance is not None:
+            return _ocr_instance
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+            _ocr_instance = RapidOCR()
+        except ImportError:
+            _ocr_instance = None  # 库未安装，返回 None
+    return _ocr_instance
+
+
 def parse_image(file_path: str) -> ParseResult:
-    """图片文件 → 无文字，图片路径本身"""
-    return ParseResult("", [file_path])
+    """图片文件 → OCR 提取文字（失败时 fallback 到空文本）"""
+    ocr = _get_ocr_instance()
+    text = ""
+    if ocr is not None:
+        try:
+            result, _ = ocr(file_path)
+            if result:
+                texts = [line[1] for line in result if len(line) >= 2]
+                text = "\n".join(texts)
+        except Exception:
+            text = ""  # OCR 失败，fallback 到空文本
+    return ParseResult("", [file_path], [], [text] if text else [])
 
 
 def parse_text(file_path: str) -> ParseResult:

@@ -27,6 +27,7 @@ echo "  3) PPT 解析 (python-pptx)"
 echo "  4) Excel 解析 (openpyxl)"
 echo "  5) Markdown 清洗 (mistune)"
 echo "  6) OneNote 解析 (onenote2xml)"
+echo "  7) 本地 OCR (rapidocr_onnxruntime) — 图片文字提取"
 echo "  0) 全部跳过（仅使用核心功能）"
 read -p "> " choices
 
@@ -38,6 +39,7 @@ PKGS[3]="python-pptx"
 PKGS[4]="openpyxl"
 PKGS[5]="mistune"
 PKGS[6]="onenote2xml lxml"
+PKGS[7]="rapidocr_onnxruntime"
 
 if echo "$choices" | grep -q "0"; then
     echo "跳过可选依赖安装"

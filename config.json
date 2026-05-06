@@ -2,10 +2,10 @@
     "ai": {
         "providers": [
             {
-                "api_key": "sk-ba3977e04bfc4edfba8cd2c9e74f7f04",
-                "model": "qwen3.6-flash",
-                "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                "multimodal": true
+                "api_key": "sk-8b53c3c2fcbe4bb88aff83ef7164b10b",
+                "model": "deepseek-chat",
+                "base_url": "https://api.deepseek.com/v1",
+                "multimodal": false
             }
         ],
         "concurrency": 5,
@@ -13,7 +13,7 @@
         "retry_delay": 1
     },
     "vault": {
-        "path": "~/knowledge-base",
+        "path": "./knowledge-base",
         "categories": ["芯片", "安全", "项目", "笔记", "其他"]
     },
     "import": {
@@ -21,16 +21,12 @@
         "failed_dir": "_failed",
         "dedup": true,
         "dedup_index": ".notemind_index.json",
-        "split_threshold_sections": 5,
-        "split_threshold_chars": 50000
+        "split_threshold_sections": 9999,
+        "split_threshold_chars": 99999999
     },
     "performance": {
         "chunk_size": 5,
         "report_enabled": true
-    },
-    "memory": {
-        "enabled": true,
-        "db_path": ".notemind_memory.db"
     },
     "logging": {
         "level": "INFO",

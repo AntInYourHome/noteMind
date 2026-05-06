@@ -24,7 +24,7 @@
         }
     },
     "vault": {
-        "path": "~/knowledge-base",
+        "path": "./knowledge-base",
         "categories": ["芯片", "安全", "项目", "笔记", "其他"]
     },
     "import": {
@@ -47,5 +47,10 @@
         "level": "INFO",
         "file": "logs/import.log",
         "log_dir": "logs"
+    },
+    "ocr": {
+        "enabled": false,
+        "engine": "rapidocr",
+        "confidence_threshold": 0.5
     }
 }

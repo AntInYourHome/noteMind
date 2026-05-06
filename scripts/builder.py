@@ -52,32 +52,42 @@ class MarkdownBuilder:
         return self
 
     def add_sections(self, section_results: list) -> "MarkdownBuilder":
-        """添加章节内容（长文档逐章输出）。"""
+        """添加章节内容（仅标题+摘要，不写原文正文）。"""
         if not section_results:
             return self
 
-        self.parts.append("## 内容\n")
+        self.parts.append("## 目录\n")
 
         for sr in section_results:
             # 章节标题
             if sr.get("title"):
                 self.parts.append(f"### {sr['title']}\n")
 
-            # 章节摘要
+            # 章节摘要（只写摘要，不写原文正文）
             if sr.get("summary") and sr.get("title"):
-                self.parts.append(f"**摘要**: {sr['summary']}\n\n")
-
-            # 章节正文
-            if sr.get("text") and sr.get("title"):
-                self.parts.append(f"{sr['text']}\n\n")
+                self.parts.append(f"{sr['summary']}\n")
 
         return self
 
     def add_images(self, vault_image_paths: list[str], image_descriptions: list[str]) -> "MarkdownBuilder":
         """添加图片及 AI 描述。"""
-        for img_path, desc in zip(vault_image_paths, image_descriptions):
-            self.parts.append(f"![[{img_path}]]\n")
-            self.parts.append(f"> **AI 图片描述**: {desc}\n\n")
+        if vault_image_paths:
+            self.parts.append("## 图片存档\n")
+            for img_path, desc in zip(vault_image_paths, image_descriptions):
+                self.parts.append(f"![[{img_path}]]\n")
+                if desc:
+                    self.parts.append(f"> {desc}\n\n")
+        return self
+
+    def add_source_ref(self, source_path: str) -> "MarkdownBuilder":
+        """添加原文位置引用。"""
+        if source_path:
+            import os
+            from pathlib import Path
+            filename = Path(source_path).name
+            self.parts.append("## 原文位置\n")
+            self.parts.append(f"- 原文：`{filename}`\n")
+            self.parts.append(f"- 路径：`{source_path}`\n\n")
         return self
 
     def add_tags_section(self, tags: list[str]) -> "MarkdownBuilder":

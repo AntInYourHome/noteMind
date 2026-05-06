@@ -22,7 +22,6 @@ from pathlib import Path
 
 # 初始化日志
 logger = logging.getLogger("notemind")
-from scripts.metrics import MetricsCollector
 
 
 def load_config(override_vault: str = None, config_path: str = None) -> dict:
@@ -146,7 +145,7 @@ def copy_images_to_vault(images: list[str], source_name: str, vault_path: str) -
     return vault_paths
 
 
-def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memory_store=None) -> dict:
+def handle_file(file_path: str, cfg: dict, vault_path: str) -> dict:
     """处理单个文件的完整流程。
 
     所有异常均在内部捕获并返回 fail 状态，保证不会中断批量处理流程。
@@ -163,8 +162,7 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
     cleanup_paths = []
 
     try:
-        return _handle_file_impl(file_path, cfg, vault_path, scheduler, memory_store,
-                                 fname, safe_name, cleanup_paths)
+        return _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_paths)
     except Exception as e:
         logger.exception(f"  [EXCEPTION] {fname} 处理异常: {e}")
         # 清理半成品
@@ -178,8 +176,7 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, scheduler=None, memo
         return {"status": "fail", "error": f"{type(e).__name__}: {e}"}
 
 
-def _handle_file_impl(file_path, cfg, vault_path, scheduler, memory_store,
-                      fname, safe_name, cleanup_paths) -> dict:
+def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_paths) -> dict:
     """handle_file 的实际实现。"""
     from scripts.analyzer import AnalysisContext
     from scripts.classifier import classify
@@ -265,7 +262,8 @@ def _handle_file_impl(file_path, cfg, vault_path, scheduler, memory_store,
 
         analysis = AnalysisContext().analyze(
             parse_result.text, parse_result.images, parse_result.sections,
-            scheduler=scheduler, callback=on_section_done, chunk_size=chunk_size
+            max_workers=5, callback=on_section_done, chunk_size=chunk_size,
+            image_ocr_texts=parse_result.image_ocr_texts
         )
 
         logger.info(f"  AI 分析完成 (流式，共 {len(analysis.sections)} 章)")
@@ -273,11 +271,11 @@ def _handle_file_impl(file_path, cfg, vault_path, scheduler, memory_store,
         # === AI 分析完成后，回填标签 ===
         analysis_tags = analysis.tags if analysis.tags else []
 
-        # 重新分类（用 AI 摘要）
+        # 重新分类（用 AI 完整摘要）
         classify_input2 = ""
         for sr in analysis.sections:
             if sr.get("summary"):
-                classify_input2 += sr["summary"][:100] + " "
+                classify_input2 += sr["summary"] + "\n"
         if classify_input2.strip():
             category = classify(classify_input2, categories)
 
@@ -304,16 +302,16 @@ def _handle_file_impl(file_path, cfg, vault_path, scheduler, memory_store,
     else:
         # 短文档：原有逻辑不变
         analysis = AnalysisContext().analyze(
-            parse_result.text, parse_result.images, parse_result.sections, scheduler=scheduler
+            parse_result.text, parse_result.images, parse_result.sections, max_workers=5,
+            image_ocr_texts=parse_result.image_ocr_texts
         )
-        if scheduler:
-            logger.info(f"  AI 分析完成 (并发模式)")
+        logger.info(f"  AI 分析完成 (并发模式)")
 
         # 3. 分类
         classify_input = ""
         for sr in analysis.sections:
             if sr.get("summary"):
-                classify_input += sr["summary"][:100] + " "
+                classify_input += sr["summary"] + "\n"
         if analysis.image_descriptions:
             classify_input += analysis.image_descriptions[0][:200]
 
@@ -372,20 +370,6 @@ def _handle_file_impl(file_path, cfg, vault_path, scheduler, memory_store,
         md5 = compute_md5(file_path)
         add_to_index(file_path, md5, category, dest_path, vault_path, dedup_index)
 
-        # 9. 存储到文档记忆
-        if memory_store:
-            sections_summary = [{"title": s.get("title", ""), "summary": s.get("summary", "")} for s in analysis.sections]
-            memory_store.store_document(
-                doc_id=md5,
-                filename=fname,
-                category=category,
-                tags=analysis.tags,
-                summary=analysis.sections[0].get("summary", "")[:500] if analysis.sections else "",
-                sections=sections_summary,
-                file_size=os.path.getsize(file_path),
-                word_count=text_count,
-            )
-
     # 成功时清空清理列表（不删除文件）
     cleanup_paths.clear()
 
@@ -394,6 +378,7 @@ def _handle_file_impl(file_path, cfg, vault_path, scheduler, memory_store,
         "path": dest_path,
         "category": category,
         "tags": analysis.tags,
+        "summary": analysis.sections[0].get("summary", "") if analysis.sections else "",
     }
 
 
@@ -527,16 +512,6 @@ def main():
     else:
         logger.warning("未配置 providers，使用单 API Key（环境变量）")
 
-    # 初始化文档记忆
-    memory_cfg = cfg.get("memory", {})
-    memory_store = None
-    if memory_cfg.get("enabled", False):
-        from scripts.memory import MemoryStore
-        db_path = memory_cfg.get("db_path", ".notemind_memory.db")
-        memory_store = MemoryStore(db_path)
-        stats = memory_store.get_stats()
-        logger.info(f"文档记忆: {stats['documents']} 篇文档, {stats['unique_tags']} 个标签")
-
     source = os.path.realpath(args.source)
     if not os.path.isdir(source):
         logger.error(f"源目录不存在: {args.source}")
@@ -545,36 +520,14 @@ def main():
     init_vault(vault_path)
     logger.info(f"Vault 路径: {vault_path}")
 
-    # 初始化 Agent 调度器
-    scheduler = None
-    if providers:
-        from scripts.ai_client import get_pool
-        from scripts.agent_scheduler import AgentScheduler
-        scheduler = AgentScheduler(get_pool(), max_workers=concurrency)
-        logger.info(f"Agent 调度器: {concurrency} 工作线程")
-
     files = collect_files(source)
     if not files:
         logger.warning("未找到可处理的文件")
         return
 
     stats = {"ok": 0, "failed": 0, "skipped": 0}
-    metrics = MetricsCollector(log_dir=cfg.get("logging", {}).get("log_dir", "logs"))
-
-    # 检查点恢复
-    processed_set = set()
-    if args.resume:
-        checkpoint = MetricsCollector.load_checkpoint(log_dir, logger=logger)
-        if checkpoint and os.path.realpath(checkpoint["source"]) == os.path.realpath(source):
-            processed_set = set(checkpoint["processed"])
-            restored_metrics = checkpoint["metrics"]
-            metrics.metrics = restored_metrics
-            metrics.metrics["run_id"] = datetime.now().strftime("%Y%m%d_%H%M%S")
-            skip_count = len(processed_set)
-            logger.info(f"[恢复] 从检查点恢复，已处理 {skip_count} 个文件")
-            logger.info(f"[恢复] 成功: {restored_metrics['succeeded']}, 失败: {restored_metrics['failed']}")
-        else:
-            logger.info("[恢复] 未找到匹配的检查点，从头开始")
+    start_time = time.time()
+    processed_count = 0
 
     # MD5 去重
     if cfg["import"].get("dedup", True):
@@ -586,7 +539,6 @@ def main():
             if dup:
                 logger.info(f"  [SKIP] 重复文件: {os.path.basename(f)} (已存在于 {dup.get('category', '?')}/{dup.get('filename', '?')})")
                 stats["skipped"] += 1
-                metrics.end_file("skip", "重复文件")
             else:
                 unique_files.append(f)
         files = unique_files
@@ -594,12 +546,10 @@ def main():
             logger.info("所有文件均为重复文件，无需处理")
             return
 
-    # 过滤已处理的文件（恢复模式下）
-    if args.resume and processed_set:
-        files = [f for f in files if f not in processed_set]
-        logger.info(f"[恢复] 过滤掉 {len(processed_set)} 个已处理文件，剩余 {len(files)} 个待处理")
-
     logger.info(f"找到 {len(files)} 个新文件待处理")
+
+    # 收集已处理文档元数据（用于双链）
+    processed_docs = []
 
     for i, file_path in enumerate(files, 1):
         fname = os.path.basename(file_path)
@@ -610,52 +560,57 @@ def main():
             stats["skipped"] += 1
             continue
 
-        metrics.start_file(file_path)
-
-        result = handle_file(file_path, cfg, vault_path, scheduler=scheduler, memory_store=memory_store)
+        result = handle_file(file_path, cfg, vault_path)
 
         if result["status"] == "ok":
             logger.info(f"  [OK] {fname} → {result['path']}")
             logger.info(f"  分类: {result['category']} | 标签: {result['tags']}")
             stats["ok"] += 1
-            metrics.end_file("ok", f"{result['category']}")
+            processed_docs.append({
+                "name": Path(result["path"]).stem,
+                "path": result["path"],
+                "tags": result["tags"],
+                "category": result["category"],
+                "summary": result.get("summary", ""),
+            })
         else:
             move_to_failed(file_path, vault_path, cfg["import"]["failed_dir"], result["error"])
             logger.error(f"  [FAIL] {fname}: {result['error']}")
             stats["failed"] += 1
-            metrics.end_file("fail", result["error"])
 
         # 进度日志（每 10 个文件打印一次）
-        metrics.log_progress(logger, interval=10)
+        processed_count += 1
+        if processed_count % 10 == 0:
+            elapsed = round(time.time() - start_time, 1)
+            logger.info(f"[进度] {processed_count}/{len(files)} | 成功: {stats['ok']} | 失败: {stats['failed']} | 耗时: {elapsed}s")
 
-        # 健康检查：失败率过高时警告
-        health = metrics.get_health()
-        if not health["healthy"] and metrics.metrics["processed"] >= 5:
-            logger.warning(f"[健康检查] {health['message']}")
+    # 文档双链
+    if not args.dry_run and processed_docs:
+        from scripts.crosslink import DocumentIndex, apply_crosslinks
+        doc_index = DocumentIndex()
+        for doc in processed_docs:
+            if os.path.exists(doc["path"]):
+                with open(doc["path"], "r", encoding="utf-8") as f:
+                    first_500 = f.read(500)
+                if "parent:" not in first_500:
+                    doc_index.add(doc["name"], doc["path"], doc["tags"],
+                                  doc["category"], doc["summary"])
+        if len(doc_index.documents) > 1:
+            count = apply_crosslinks(vault_path, doc_index)
+            logger.info(f"双链已建立: {count} 个文件更新了相关文档链接")
 
-        # 保存检查点（每处理一个文件）
-        if not args.dry_run:
-            metrics.save_checkpoint(source, files,
-                set(m["file"] for m in metrics.metrics["file_details"]))
-
-    # 健康检查
-    health = metrics.get_health()
-    logger.info(f"健康状态: {health['message']}")
+    # 最终统计
+    elapsed = round(time.time() - start_time, 1)
+    logger.info(f"健康状态: 正常")
 
     try:
         if not args.dry_run:
             update_moc(vault_path)
-            # 清除检查点（处理完成）
-            MetricsCollector.clear_checkpoint(log_dir)
-            # 保存指标报告
-            report_path = metrics.save_report()
-            logger.info(f"指标报告已保存: {report_path}")
-
-        metrics.print_summary(logger)
 
         # Provider 健康报告（多模型配置时）
-        if scheduler and scheduler.pool:
-            scheduler.pool.print_health_report()
+        pool = get_pool()
+        if pool:
+            pool.print_health_report()
 
         # 日志分析（从日志文件中识别限流等问题）
         from scripts.ai_client import print_log_analysis
@@ -677,13 +632,13 @@ def main():
             logger.info(f"  API 错误次数:     {perf['errors']}")
             logger.info(f"{'=' * 60}\n")
             reset_perf_stats()
+
+        logger.info(f"{'=' * 50}")
+        logger.info(f"=== NoteMind 处理完成 ===")
+        logger.info(f"成功: {stats['ok']} | 失败: {stats['failed']} | 跳过: {stats['skipped']} | 总耗时: {elapsed}s")
+        logger.info(f"{'=' * 50}")
     except Exception as e:
-        # 确保即使报告生成失败也能保存指标
-        try:
-            report_path = metrics.save_report()
-            logger.error(f"报告生成失败，但指标已保存: {report_path} — {e}")
-        except Exception:
-            logger.error(f"指标保存也失败: {e}")
+        logger.error(f"报告生成失败: {e}")
 
 
 if __name__ == "__main__":
