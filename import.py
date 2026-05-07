@@ -538,7 +538,7 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3) -> None:
                         break
             except Exception:
                 pass
-            lines.append(f"- [[{note_stem}]] {note_tags}\n")
+            lines.append(f"- [[{note_rel}|{note_stem}]] {note_tags}\n")
             total_notes += 1
 
     lines.append(f"\n---\n**总计：{total_notes} 篇笔记**\n")
@@ -673,6 +673,8 @@ def main():
                 "category": result["category"],
                 "summary": result.get("summary", ""),
             })
+            # 每完成一篇文档，更新 MOC
+            update_moc(vault_path)
         else:
             move_to_failed(file_path, vault_path, cfg["import"]["failed_dir"], result["error"])
             logger.error(f"  [FAIL] {fname}: {result['error']}")
