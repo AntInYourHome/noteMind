@@ -24,6 +24,19 @@ test_vault2/
 test_source/
 test_source2/
 
+# 待导入文件（inbox 目录）
+inbox/
+
+# 临时文件（不纳入 git）
+*.pdf
+*.pptx
+*.ppt
+*.xlsx
+*.xls
+*.docx
+*.doc
+*.mdx
+
 # IDE
 .vscode/
 .idea/
