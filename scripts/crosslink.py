@@ -19,7 +19,31 @@ class DocumentIndex:
             "tags": set(tags) if tags else set(),
             "category": category or "其他",
             "summary": summary or "",
+            # 计算 obsidian wikilink：取 vault 内的相对路径（不含 .md 后缀）
+            "wikilink": self._compute_wikilink(path),
         }
+
+    @staticmethod
+    def _compute_wikilink(abs_path: str) -> str:
+        """从绝对路径计算 Obsidian wikilink。
+
+        需要提取 vault 内的相对路径，去掉 .md 后缀。
+        例如: /path/to/vault/安全/操作系统安全/HarmonyOS/2026-05-07-白皮书.md
+        → 安全/操作系统安全/HarmonyOS/2026-05-07-白皮书
+        """
+        from pathlib import Path
+        p = Path(abs_path)
+        # 去掉 .md 后缀
+        stem = p.with_suffix("")
+        # 取 vault 内的相对路径（从分类目录开始）
+        parts = stem.parts
+        # 找到分类目录（第一个已知一级分类）
+        known_tops = {"安全", "操作系统", "技术", "个人", "其他"}
+        for i, part in enumerate(parts):
+            if part in known_tops:
+                return "/".join(parts[i:])
+        # 兜底：用最后两级
+        return "/".join(parts[-3:]) if len(parts) >= 3 else stem.name
 
     def compute_links(self, max_links: int = 5, min_score: float = 2.0) -> dict[str, list[str]]:
         """为每篇文档计算 Top-K 相关文档。
@@ -94,10 +118,12 @@ def apply_crosslinks(vault_path: str, index: DocumentIndex,
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-        # 构建相关文档段落
+        # 构建相关文档段落（使用完整 wikilink 路径）
         lines = ["\n## 相关文档\n"]
         for linked_name in linked_names:
-            lines.append(f"- [[{linked_name}]]\n")
+            linked_doc = index.documents[linked_name]
+            wl = linked_doc.get("wikilink", linked_name)
+            lines.append(f"- [[{wl}]]\n")
         new_section = "".join(lines)
 
         # 替换已有相关文档段落，或追加到末尾

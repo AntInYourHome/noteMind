@@ -51,6 +51,16 @@ class MarkdownBuilder:
             self.parts.append(f"{summary}\n")
         return self
 
+    def add_section_title(self, title: str) -> "MarkdownBuilder":
+        """添加一个二级标题。"""
+        self.parts.append(f"## {title}\n")
+        return self
+
+    def add_paragraph(self, text: str) -> "MarkdownBuilder":
+        """添加一个段落。"""
+        self.parts.append(f"{text}\n")
+        return self
+
     def add_sections(self, section_results: list) -> "MarkdownBuilder":
         """添加章节内容（仅标题+摘要，不写原文正文）。"""
         if not section_results:
