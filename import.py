@@ -116,11 +116,17 @@ def _update_frontmatter_tags(file_path: str, tags: list[str]):
         logger.warning(f"  更新标签失败 {file_path}: {e}")
 
 
-def archive_source(file_path: str, vault_path: str, archive_dir: str) -> str:
-    """将原始文件归档到 Vault。"""
+def archive_source(file_path: str, vault_path: str, archive_dir: str, remove_source: bool = True) -> str:
+    """将原始文件归档到 Vault。
+
+    Args:
+        remove_source: 归档成功后是否从源目录删除（默认 True）
+    """
     archive_path = os.path.join(vault_path, archive_dir, os.path.basename(file_path))
     os.makedirs(os.path.dirname(archive_path), exist_ok=True)
-    shutil.copy2(file_path, archive_path)
+    shutil.copy2(file_path, archive_path)  # 先复制
+    if remove_source:
+        os.remove(file_path)  # 成功后删除源文件
     return archive_path
 
 
@@ -266,80 +272,70 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, fname, safe_
     categories = cfg["vault"].get("categories", {"其他": []})
 
     if should_split:
-        # 大文档：流式分析，逐章输出即写磁盘
+        # 大文档：AI 分析后只生成一个 MD（大纲 + 概述），不逐章拆分
         date_str = datetime.now().strftime("%Y-%m-%d")
         safe_name = Path(fname).stem.replace(" ", "_")
 
-        section_links = []
-        for i, sec in enumerate(parse_result.sections):
-            title = sec.title or f"第{i+1}章"
-            safe_title = title.replace(" ", "_").replace("/", "_").replace("\\", "_")
-            link_name = f"{date_str}-{safe_name}-{i+1:02d}-{safe_title}"
-            section_links.append((link_name, title))
+        # AI 分析
+        chunk_size = cfg.get("performance", {}).get("chunk_size", 5)
+        analysis = AnalysisContext().analyze(
+            parse_result.text, parse_result.images, parse_result.sections,
+            max_workers=5, callback=None, chunk_size=chunk_size,
+            image_ocr_texts=parse_result.image_ocr_texts
+        )
+        logger.info(f"  AI 分析完成 (共 {len(analysis.sections)} 章)")
 
-        classify_input = " ".join(s.title for s in parse_result.sections if s.title)[:300]
-        if classify_input:
+        # 分类
+        classify_input = ""
+        for sr in analysis.sections:
+            if sr.get("summary"):
+                classify_input += sr["summary"] + "\n"
+        if classify_input.strip():
             category, doc_type_tags = classify(classify_input, categories, title=fname)
         else:
             category, doc_type_tags = "其他", []
 
+        # 标签
+        all_tags = (analysis.tags or []) + doc_type_tags
+
+        # 构建文档大纲（章节标题列表）
+        outline_sections = []
+        for i, sr in enumerate(analysis.sections):
+            title = sr.get("title") or f"第{i+1}章"
+            outline_sections.append(f"- {title}")
+
+        # 生成全文概述（AI 综合所有章节摘要）
+        from scripts.ai_client import generate_summary
+        overview = ""
+        if classify_input.strip():
+            try:
+                overview = generate_summary(classify_input[:5000])
+            except Exception as e:
+                logger.warning(f"  全文概述生成失败: {e}")
+                overview = classify_input[:500]
+
+        # 构建单个 MD 文件
         builder = MarkdownBuilder(fname, date_str)
-        builder.add_frontmatter(category, [], source_path=file_path)
-        builder.add_file_summary("")
+        builder.add_frontmatter(category, all_tags, source_path=file_path).add_title()
+        builder.add_file_summary(overview)
+
+        # 添加大纲章节
+        builder.add_section_title("文档大纲")
+        builder.add_paragraph("\n".join(outline_sections))
+
+        builder.add_tags_section(all_tags).add_footer()
+
+        # 写入
         dest_dir = os.path.join(vault_path, category)
         os.makedirs(dest_dir, exist_ok=True)
-        index_filename = f"{date_str}-{safe_name}.md"
-        index_path = os.path.join(dest_dir, index_filename)
-        cleanup_paths.append(index_path)
-        index_content = builder.build_index(section_links, source_path=file_path)
-        with open(index_path, "w", encoding="utf-8") as f:
-            f.write(index_content)
-        logger.info(f"  [INDEX] {index_filename} ({len(section_links)} 个章节)")
-
-        parent_name = f"{date_str}-{safe_name}"
-        chapter_paths_list = []
-
-        def on_section_done(index, total, section_result):
-            title = section_result.get("title", f"第{index+1}章") or f"第{index+1}章"
-            safe_title = title.replace(" ", "_").replace("/", "_").replace("\\", "_")
-            link_name = f"{date_str}-{safe_name}-{index+1:02d}-{safe_title}"
-            chapter_content = builder.build_section_note(
-                section=section_result, parent_name=parent_name, tags=[], source_path=file_path,
-            )
-            chapter_path = os.path.join(dest_dir, f"{link_name}.md")
-            cleanup_paths.append(chapter_path)
-            chapter_paths_list.append(chapter_path)
-            with open(chapter_path, "w", encoding="utf-8") as f:
-                f.write(chapter_content)
-            logger.info(f"  [OK] 章节 [{index+1}/{total}] {title} → {link_name}.md")
-
-        chunk_size = cfg.get("performance", {}).get("chunk_size", 5)
-        analysis = AnalysisContext().analyze(
-            parse_result.text, parse_result.images, parse_result.sections,
-            max_workers=5, callback=on_section_done, chunk_size=chunk_size,
-            image_ocr_texts=parse_result.image_ocr_texts
-        )
-        logger.info(f"  AI 分析完成 (流式，共 {len(analysis.sections)} 章)")
-
-        analysis_tags = analysis.tags if analysis.tags else []
-        classify_input2 = ""
-        for sr in analysis.sections:
-            if sr.get("summary"):
-                classify_input2 += sr["summary"] + "\n"
-        if classify_input2.strip():
-            category, doc_type_tags = classify(classify_input2, categories, title=fname)
-
-        all_tags = analysis_tags + doc_type_tags
-        if all_tags:
-            _update_frontmatter_tags(index_path, all_tags)
-        for cp in chapter_paths_list:
-            if os.path.exists(cp):
-                _update_frontmatter_tags(cp, all_tags)
-
-        dest_path = index_path
+        filename = f"{date_str}-{safe_name}.md"
+        dest_path = os.path.join(dest_dir, filename)
+        cleanup_paths.append(dest_path)
+        with open(dest_path, "w", encoding="utf-8") as f:
+            f.write(builder.build())
 
     else:
-        # 短文档
+        # 短文档：同样只生成大纲 + 概述
         analysis = AnalysisContext().analyze(
             parse_result.text, parse_result.images, parse_result.sections, max_workers=5,
             image_ocr_texts=parse_result.image_ocr_texts
@@ -358,14 +354,30 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, fname, safe_
 
         date_str = datetime.now().strftime("%Y-%m-%d")
         safe_name = Path(fname).stem.replace(" ", "_")
+
+        # 构建文档大纲
+        outline_sections = []
+        for i, sr in enumerate(analysis.sections):
+            title = sr.get("title") or f"第{i+1}章"
+            outline_sections.append(f"- {title}")
+
+        # 生成全文概述（AI 综合所有章节摘要）
+        from scripts.ai_client import generate_summary
+        overview = ""
+        if classify_input.strip():
+            try:
+                overview = generate_summary(classify_input[:5000])
+            except Exception as e:
+                logger.warning(f"  全文概述生成失败: {e}")
+                overview = classify_input[:500]
+
         builder = MarkdownBuilder(fname, date_str)
         builder.add_frontmatter(category, all_tags, source_path=file_path).add_title()
+        builder.add_file_summary(overview)
 
-        if len(analysis.sections) == 1 and not analysis.sections[0].get("title"):
-            builder.add_file_summary(analysis.sections[0].get("summary", ""))
-
-        builder.add_sections(analysis.sections)
-        # 不复制内嵌图片到 vault，不生成图片存档段落
+        # 添加大纲章节
+        builder.add_section_title("文档大纲")
+        builder.add_paragraph("\n".join(outline_sections))
 
         builder.add_tags_section(all_tags).add_footer()
 
@@ -385,15 +397,15 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, fname, safe_
         with open(dest_path, "w", encoding="utf-8") as f:
             f.write(builder.build())
 
-    # 归档原始文件
-    archive_source(file_path, vault_path, cfg["import"]["archive_dir"])
-
-    # 更新去重索引
+    # 更新去重索引（源文件还在）
     if cfg["import"].get("dedup", True):
         from scripts.dedup import compute_md5, add_to_index
         dedup_index = cfg["import"].get("dedup_index", ".notemind_index.json")
         md5 = compute_md5(file_path)
         add_to_index(file_path, md5, category, dest_path, vault_path, dedup_index)
+
+    # 归档原始文件（成功后删除源文件）
+    archive_source(file_path, vault_path, cfg["import"]["archive_dir"], remove_source=True)
 
     cleanup_paths.clear()
 
@@ -402,7 +414,7 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, fname, safe_
         "path": dest_path,
         "category": category,
         "tags": all_tags,
-        "summary": analysis.sections[0].get("summary", "") if analysis.sections else "",
+        "summary": overview,
     }
 
 
