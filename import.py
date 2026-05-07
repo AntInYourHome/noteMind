@@ -41,7 +41,13 @@ def load_config(override_vault: str = None, config_path: str = None) -> dict:
 def init_vault(vault_path: str) -> None:
     """初始化 Vault 目录结构。"""
     cfg = load_config()
-    dirs = cfg["vault"].get("categories", ["其他"]) + [
+    categories = cfg["vault"].get("categories", ["其他"])
+    # 提取所有一级目录
+    if isinstance(categories, dict):
+        top_dirs = list(set(k.split("/")[0] for k in categories.keys()))
+    else:
+        top_dirs = categories
+    dirs = top_dirs + [
         cfg["import"]["archive_dir"],
         cfg["import"]["failed_dir"],
     ]
@@ -173,7 +179,7 @@ def handle_file(file_path: str, cfg: dict, vault_path: str) -> dict:
                     logger.info(f"  [CLEANUP] 移除半成品: {p}")
             except Exception:
                 pass
-        return {"status": "fail", "error": f"{type(e).__name__}: {e}"}
+        return {"status": "fail", "error": f"{type(e).__name__}: {e}", "doc_type_tags": []}
 
 
 def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_paths) -> dict:
@@ -217,8 +223,11 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
 
         # 临时分类（后续会用 AI 分析后的摘要重新分类）
         classify_input = " ".join(s.title for s in parse_result.sections if s.title)[:300]
-        categories = cfg["vault"].get("categories", ["其他"])
-        category = classify(classify_input, categories, title=fname) if classify_input else "其他"
+        categories = cfg["vault"].get("categories", {"其他": []})
+        if classify_input:
+            category, doc_type_tags = classify(classify_input, categories, title=fname)
+        else:
+            category, doc_type_tags = "其他", []
 
         # 先写索引文件（tags 暂为空，后续回填）
         builder = MarkdownBuilder(fname, date_str)
@@ -277,17 +286,20 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
             if sr.get("summary"):
                 classify_input2 += sr["summary"] + "\n"
         if classify_input2.strip():
-            category = classify(classify_input2, categories, title=fname)
+            category, doc_type_tags = classify(classify_input2, categories, title=fname)
+
+        # 合并 AI 标签和文档类型标签
+        all_tags = analysis_tags + doc_type_tags
 
         # 更新索引文件 frontmatter 标签
-        if analysis_tags:
-            _update_frontmatter_tags(index_path, analysis_tags)
-            logger.info(f"  索引文件标签已回填: {len(analysis_tags)} 个")
+        if all_tags:
+            _update_frontmatter_tags(index_path, all_tags)
+            logger.info(f"  索引文件标签已回填: {len(all_tags)} 个")
 
         # 更新所有章节文件 frontmatter 标签
         for cp in chapter_paths_list:
             if os.path.exists(cp):
-                _update_frontmatter_tags(cp, analysis_tags)
+                _update_frontmatter_tags(cp, all_tags)
         logger.info(f"  章节文件标签已回填: {len(chapter_paths_list)} 个文件")
 
         # 归档原始文件
@@ -315,8 +327,8 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
         if analysis.image_descriptions:
             classify_input += analysis.image_descriptions[0][:200]
 
-        categories = cfg["vault"].get("categories", ["其他"])
-        category = classify(classify_input, categories, title=fname)
+        categories = cfg["vault"].get("categories", {"其他": []})
+        category, doc_type_tags = classify(classify_input, categories, title=fname)
         archive_source(file_path, vault_path, cfg["import"]["archive_dir"])
 
         # 5. 复制图片
@@ -328,8 +340,9 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
         # 6. 构建 Markdown（短文档：单文件输出）
         date_str = datetime.now().strftime("%Y-%m-%d")
         safe_name = Path(fname).stem.replace(" ", "_")
+        all_tags = (analysis.tags or []) + doc_type_tags
         builder = MarkdownBuilder(fname, date_str)
-        builder.add_frontmatter(category, analysis.tags, source_path=file_path).add_title()
+        builder.add_frontmatter(category, all_tags, source_path=file_path).add_title()
 
         if len(analysis.sections) == 1 and not analysis.sections[0].get("title"):
             builder.add_file_summary(analysis.sections[0].get("summary", ""))
@@ -339,7 +352,7 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
         if vault_image_paths:
             builder.add_images(vault_image_paths, analysis.image_descriptions)
 
-        builder.add_tags_section(analysis.tags).add_footer()
+        builder.add_tags_section(all_tags).add_footer()
 
         dest_dir = os.path.join(vault_path, category)
         os.makedirs(dest_dir, exist_ok=True)
@@ -375,7 +388,7 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
         "status": "ok",
         "path": dest_path,
         "category": category,
-        "tags": analysis.tags,
+        "tags": all_tags,
         "summary": analysis.sections[0].get("summary", "") if analysis.sections else "",
     }
 
@@ -388,57 +401,64 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3) -> None:
         max_tags_per_note: 每个笔记最多显示标签数（防止标签过多导致卡顿）
     """
     cfg = load_config()
-    categories = cfg["vault"].get("categories", ["其他"])
+    categories = cfg["vault"].get("categories", {"其他": []})
     moc_path = os.path.join(vault_path, "MOC.md")
 
     lines = ["# 知识树\n", f"> 自动更新于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"]
     total_notes = 0
 
-    for cat in categories:
-        cat_dir = os.path.join(vault_path, cat)
-        if not os.path.isdir(cat_dir):
+    if isinstance(categories, dict):
+        # 多级分类树：按一级分类组织，递归扫描子目录
+        top_dirs = list(set(k.split("/")[0] for k in categories.keys()))
+        if "其他" not in top_dirs:
+            top_dirs.append("其他")
+    else:
+        # 旧版平级分类
+        top_dirs = categories
+
+    def _scan_notes(dir_path: str, rel_path: str) -> list[tuple[str, str, str]]:
+        """递归扫描目录，返回 [(note_stem, full_rel_path, content_preview), ...]。"""
+        results = []
+        if not os.path.isdir(dir_path):
+            return results
+        for entry in sorted(os.listdir(dir_path)):
+            full_entry = os.path.join(dir_path, entry)
+            entry_rel = os.path.join(rel_path, entry) if rel_path else entry
+            if os.path.isdir(full_entry) and not entry.startswith("."):
+                results.extend(_scan_notes(full_entry, entry_rel))
+            elif entry.endswith(".md") and not entry.startswith("."):
+                try:
+                    with open(full_entry, "r", encoding="utf-8") as nf:
+                        preview = nf.read(500)
+                    if "parent:" not in preview or "doc_type: index" in preview:
+                        results.append((Path(entry).stem, entry_rel, preview))
+                except Exception:
+                    pass
+        return results
+
+    for top_dir in sorted(top_dirs):
+        top_path = os.path.join(vault_path, top_dir)
+        if not os.path.isdir(top_path):
             continue
 
-        notes = sorted([f for f in os.listdir(cat_dir) if f.endswith(".md") and not f.startswith(".")])
+        notes = _scan_notes(top_path, top_dir)
         if not notes:
             continue
 
-        # 只统计非拆分章节文件（即排除 parent 字段的章节文件）
-        index_notes = []
-        for note in notes:
-            # 快速检查：索引文件通常没有 parent frontmatter
-            full_path = os.path.join(cat_dir, note)
-            try:
-                with open(full_path, "r", encoding="utf-8") as nf:
-                    first_200 = nf.read(200)
-                    if "parent:" not in first_200 and "doc_type: index" not in first_200:
-                        index_notes.append(note)
-                    elif "doc_type: index" in first_200:
-                        index_notes.append(note)
-            except Exception:
-                pass
-
-        if not index_notes:
-            continue
-
-        lines.append(f"\n## {cat} ({len(index_notes)} 篇)\n")
-        for note in index_notes:
-            note_path = Path(cat) / Path(note).stem
+        lines.append(f"\n## {top_dir} ({len(notes)} 篇)\n")
+        for note_stem, note_rel, preview in notes:
+            note_path = Path(note_rel).with_suffix("")
             note_tags = ""
-            full_path = os.path.join(cat_dir, note)
             try:
-                with open(full_path, "r", encoding="utf-8") as nf:
-                    # 只读取前 500 字符（frontmatter 区域）
-                    content = nf.read(500)
-                    for line in content.split("\n"):
-                        if line.startswith("tags:"):
-                            tags_raw = line[len("tags:"):].strip().strip("[]")
-                            tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
-                            display_tags = tags[:max_tags_per_note]
-                            note_tags = ", ".join([f"`#{t}`" for t in display_tags])
-                            if len(tags) > max_tags_per_note:
-                                note_tags += f" 等{len(tags)}个"
-                            break
+                for line in preview.split("\n"):
+                    if line.startswith("tags:"):
+                        tags_raw = line[len("tags:"):].strip().strip("[]")
+                        tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
+                        display_tags = tags[:max_tags_per_note]
+                        note_tags = ", ".join([f"`#{t}`" for t in display_tags])
+                        if len(tags) > max_tags_per_note:
+                            note_tags += f" 等{len(tags)}个"
+                        break
             except Exception:
                 pass
             lines.append(f"- [[{note_path}]] {note_tags}\n")

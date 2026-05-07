@@ -2,30 +2,40 @@
     "ai": {
         "providers": [
             {
-                "api_key": "sk-YOUR_API_KEY_1",
-                "model": "qwen3.6-flash",
-                "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "api_key": "sk-YOUR_API_KEY",
+                "model": "deepseek-chat",
+                "base_url": "https://api.deepseek.com/v1",
                 "multimodal": true
-            },
-            {
-                "api_key": "sk-YOUR_API_KEY_2",
-                "model": "qwen3.6-flash",
-                "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                "multimodal": false
             }
         ],
         "concurrency": 5,
         "max_retries": 3,
-        "retry_delay": 1,
-        "tags_model": {
-            "model": "qwen-turbo",
-            "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-            "api_key": "sk-YOUR_API_KEY_FOR_TAGS"
-        }
+        "retry_delay": 1
     },
     "vault": {
         "path": "./knowledge-base",
-        "categories": ["芯片", "安全", "项目", "笔记", "其他"]
+        "categories": {
+            "安全/操作系统安全/HarmonyOS": ["架构文档", "白皮书", "权限模型", "SELinux策略"],
+            "安全/操作系统安全/Android": ["安全架构", "逆向分析", "应用安全"],
+            "安全/操作系统安全/Linux": ["内核安全", "Capabilities"],
+            "安全/终端安全/PC安全": ["系统加固", "恶意软件防护"],
+            "安全/终端安全/移动安全": ["隐私保护", "应用审核"],
+            "安全/安全运营/威胁情报": [],
+            "安全/安全运营/应急响应": [],
+            "安全/安全运营/安全评估": ["漏洞分析", "渗透测试"],
+            "安全/安全治理/合规标准": ["等保2.0", "ISO27001"],
+            "安全/安全治理/安全配置": ["基线配置", "访问控制"],
+            "操作系统/内核与驱动": [],
+            "操作系统/文件系统": [],
+            "操作系统/编译与构建": [],
+            "技术/编程语言": [],
+            "技术/架构设计": [],
+            "技术/AI与机器学习": [],
+            "个人/学习笔记": [],
+            "个人/项目记录": [],
+            "个人/生活记录": [],
+            "其他": []
+        }
     },
     "import": {
         "archive_dir": "_archive",
@@ -39,18 +49,9 @@
         "chunk_size": 5,
         "report_enabled": true
     },
-    "memory": {
-        "enabled": true,
-        "db_path": ".notemind_memory.db"
-    },
     "logging": {
         "level": "INFO",
         "file": "logs/import.log",
         "log_dir": "logs"
-    },
-    "ocr": {
-        "enabled": false,
-        "engine": "rapidocr",
-        "confidence_threshold": 0.5
     }
 }
