@@ -41,9 +41,13 @@ inbox/
 *.bin
 *.pth
 *.safetensors
+*.tar.gz
 minimind-v/model/
 minimind-v/out/
 minimind-v/modelscope_cache/
+
+# Release 产物（本地生成，不纳入 git）
+release/
 
 # IDE
 .vscode/
