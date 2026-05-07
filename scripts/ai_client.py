@@ -97,6 +97,11 @@ def _call_with_model(model_config: dict, messages: list, max_tokens: int = 500, 
                 if not message:
                     raise RuntimeError(f"API 返回空 message: {data}")
                 content = message.get("content", "")
+                # reasoning 模型兼容：content 为 null 时，检查 reasoning 字段
+                if not content:
+                    reasoning = message.get("reasoning_content") or message.get("reasoning", "")
+                    if reasoning:
+                        content = reasoning
                 return {
                     "content": content.strip() if content else "[空响应]",
                     "input_tokens": usage.get("prompt_tokens", 0),
@@ -507,6 +512,11 @@ def _call_with_provider(provider: dict, messages: list, max_tokens: int = 500, r
                 if not message:
                     raise RuntimeError(f"API 返回空 message: {data}")
                 content = message.get("content", "")
+                # reasoning 模型兼容：content 为 null 时，检查 reasoning 字段
+                if not content:
+                    reasoning = message.get("reasoning_content") or message.get("reasoning", "")
+                    if reasoning:
+                        content = reasoning
                 content = content.strip() if content else "[空响应]"
                 return {
                     "content": content,
