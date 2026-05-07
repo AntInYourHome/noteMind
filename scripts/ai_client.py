@@ -707,9 +707,9 @@ def reset_perf_stats():
 
 # --- Prompt 模板（Level 2: 精简 + system message 缓存） ---
 
-_SUMMARY_SYSTEM = "你是文档摘要专家。用中文提取核心要点，控制在 300 字以内。"
-_TAGS_SYSTEM = "你是关键词提取专家。从内容中提取 3-8 个中文标签，用逗号分隔。"
-_OUTLINE_SYSTEM = "你是文档结构分析专家。根据各章节摘要，提取文档的一级/二级章节标题列表，每行一个，使用 '- ' 开头。不要包含页码、重复项或太细的子章节。只输出标题列表。"
+_SUMMARY_SYSTEM = "你是文档摘要专家。始终用中文输出。对于长文本（>2000字），先给出整体概述（2-3句），再分章节/段落总结核心要点（每条1-2句）。控制在 500 字以内。"
+_TAGS_SYSTEM = "你是关键词提取专家。始终用中文输出。从内容中提取 3-8 个中文标签，用逗号分隔。"
+_OUTLINE_SYSTEM = "你是文档结构分析专家。始终用中文输出。根据各章节摘要，提取文档的一级/二级章节标题列表，每行一个，使用 '- ' 开头。不要包含页码、重复项或太细的子章节。只输出标题列表。"
 
 
 def generate_summary(text: str) -> str:
@@ -717,17 +717,18 @@ def generate_summary(text: str) -> str:
 
     使用 system message 分离模式：固定模板放 system（DashScope 缓存），
     只发送文本到 user，减少每次请求的 input tokens。
+    长文本会输出整体概述 + 分章节总结。
     """
     if len(text) < 200:
         return text.strip()
 
     messages = [
         {"role": "system", "content": _SUMMARY_SYSTEM},
-        {"role": "user", "content": text[:5000]},
+        {"role": "user", "content": text[:8000]},
     ]
 
     try:
-        result = _call_api(messages, max_tokens=300)
+        result = _call_api(messages, max_tokens=600)
         _perf_stats["api_calls"] += 1
         _perf_stats["input_tokens"] += result.get("input_tokens", 0)
         _perf_stats["output_tokens"] += result.get("output_tokens", 0)
