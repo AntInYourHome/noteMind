@@ -231,7 +231,7 @@ class LongDocStrategy:
                     "role": "user",
                     "content": f"请用中文总结以下内容，提取核心要点（3-5 条），控制在 300 字以内：\n\n{text[:5000]}"
                 }],
-                "max_tokens": 300,
+                "max_tokens": 500,
                 "section_index": idx,
                 "task_type": "summary",
                 "text": text,
