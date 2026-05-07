@@ -100,6 +100,21 @@ class MarkdownBuilder:
             self.parts.append(f"- 路径：`{source_path}`\n\n")
         return self
 
+    def add_archive_link(self, archive_filename: str, category: str) -> "MarkdownBuilder":
+        """添加归档文件的双链（Obsidian wikilink）。
+
+        Args:
+            archive_filename: 归档文件名（如 "HarmonyOS+6.0安全技术白皮书.pdf"）
+            category: 多级分类路径（如 "安全/操作系统安全/HarmonyOS"）
+        """
+        if not archive_filename:
+            return self
+        # 计算从分类目录到 _archive 的相对路径
+        archive_link = archive_filename
+        self.parts.append(f"## 原始文件\n")
+        self.parts.append(f"- 归档：[[{archive_link}]]\n\n")
+        return self
+
     def add_tags_section(self, tags: list[str]) -> "MarkdownBuilder":
         """添加标签区域。"""
         if tags:

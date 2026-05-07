@@ -314,6 +314,20 @@ class AnalysisContext:
 
     TEXT_THRESHOLD = 3000      # 字数阈值
     SECTION_THRESHOLD = 3      # 章节数阈值
+    MAX_VLM_IMAGES = 10        # 每文档最多用 VLM 分析的图片数（其余只用 OCR）
+
+    def _limit_images(self, images: list[str], ocr_texts: list[str] = None):
+        """限制图片分析数量：前 N 张正常分析，剩余只用 OCR（不调用 VLM）。
+
+        返回: (images_to_analyze, ocr_texts_for_remaining)
+        """
+        if len(images) <= self.MAX_VLM_IMAGES:
+            return images, []
+        remaining_ocr = []
+        if ocr_texts:
+            # 超出部分只保留 OCR 文本
+            remaining_ocr = ocr_texts[self.MAX_VLM_IMAGES:]
+        return images[:self.MAX_VLM_IMAGES], remaining_ocr
 
     def analyze(self, text: str, images: list[str], sections: list, max_workers: int = 5,
                 callback=None, chunk_size: int = 1,
@@ -326,18 +340,32 @@ class AnalysisContext:
             chunk_size: 合并章节数，默认 1（不合并），建议 3-5
             image_ocr_texts: 可选，图片的 OCR 文本列表（与 images 一一对应）
         """
+        # 限制 VLM 分析的图片数量（其余只用 OCR）
+        limited_images = images
+        limited_ocr_texts = image_ocr_texts
+        remaining_ocr = []
+        if len(images) > self.MAX_VLM_IMAGES:
+            limited_images, remaining_ocr = self._limit_images(images, image_ocr_texts)
+            limited_ocr_texts = image_ocr_texts[:self.MAX_VLM_IMAGES] if image_ocr_texts else None
+
         # 有结构化章节 → 长文档策略
         if len(sections) >= self.SECTION_THRESHOLD:
-            return LongDocStrategy().analyze(sections, images, max_workers, callback, chunk_size,
-                                             image_ocr_texts)
-
+            result = LongDocStrategy().analyze(sections, limited_images, max_workers, callback, chunk_size,
+                                               limited_ocr_texts)
         # 文字量大 → 长文档策略
-        if len(text) >= self.TEXT_THRESHOLD and sections:
-            return LongDocStrategy().analyze(sections, images, max_workers, callback, chunk_size,
-                                             image_ocr_texts)
-
+        elif len(text) >= self.TEXT_THRESHOLD and sections:
+            result = LongDocStrategy().analyze(sections, limited_images, max_workers, callback, chunk_size,
+                                               limited_ocr_texts)
         # 否则 → 短文档策略
-        return ShortDocStrategy().analyze(text, images, image_ocr_texts)
+        else:
+            result = ShortDocStrategy().analyze(text, limited_images, limited_ocr_texts)
+
+        # 超出部分的图片，直接用 OCR 文本作为描述
+        for i, ocr_text in enumerate(remaining_ocr):
+            if ocr_text and ocr_text.strip():
+                result.image_descriptions.append(ocr_text.strip())
+
+        return result
 
 
 def _clean_tags(tags: list[str]) -> list[str]:

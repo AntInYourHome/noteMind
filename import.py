@@ -298,11 +298,21 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, fname, safe_
         # 标签
         all_tags = (analysis.tags or []) + doc_type_tags
 
-        # 构建文档大纲（章节标题列表）
-        outline_sections = []
-        for i, sr in enumerate(analysis.sections):
-            title = sr.get("title") or f"第{i+1}章"
-            outline_sections.append(f"- {title}")
+        # 构建文档大纲（AI 从章节摘要中提取真正的章节标题）
+        from scripts.ai_client import generate_outline
+        section_summaries = [
+            {"title": sr.get("title"), "summary": sr.get("summary")}
+            for sr in analysis.sections
+        ]
+        outline_sections = generate_outline(section_summaries)
+        if not outline_sections:
+            # fallback：去重后的标题
+            seen = set()
+            for sr in analysis.sections:
+                t = sr.get("title") or ""
+                if t and t not in seen and len(t) > 3:
+                    seen.add(t)
+                    outline_sections.append(f"- {t}")
 
         # 生成全文概述（AI 综合所有章节摘要）
         from scripts.ai_client import generate_summary
@@ -322,6 +332,9 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, fname, safe_
         # 添加大纲章节
         builder.add_section_title("文档大纲")
         builder.add_paragraph("\n".join(outline_sections))
+
+        # 添加归档文件双链
+        builder.add_archive_link(fname, category)
 
         builder.add_tags_section(all_tags).add_footer()
 
@@ -355,11 +368,20 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, fname, safe_
         date_str = datetime.now().strftime("%Y-%m-%d")
         safe_name = Path(fname).stem.replace(" ", "_")
 
-        # 构建文档大纲
-        outline_sections = []
-        for i, sr in enumerate(analysis.sections):
-            title = sr.get("title") or f"第{i+1}章"
-            outline_sections.append(f"- {title}")
+        # 构建文档大纲（AI 从章节摘要中提取真正的章节标题）
+        from scripts.ai_client import generate_outline
+        section_summaries = [
+            {"title": sr.get("title"), "summary": sr.get("summary")}
+            for sr in analysis.sections
+        ]
+        outline_sections = generate_outline(section_summaries)
+        if not outline_sections:
+            seen = set()
+            for sr in analysis.sections:
+                t = sr.get("title") or ""
+                if t and t not in seen and len(t) > 3:
+                    seen.add(t)
+                    outline_sections.append(f"- {t}")
 
         # 生成全文概述（AI 综合所有章节摘要）
         from scripts.ai_client import generate_summary
@@ -378,6 +400,9 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, fname, safe_
         # 添加大纲章节
         builder.add_section_title("文档大纲")
         builder.add_paragraph("\n".join(outline_sections))
+
+        # 添加归档文件双链
+        builder.add_archive_link(fname, category)
 
         builder.add_tags_section(all_tags).add_footer()
 
@@ -543,9 +568,14 @@ def main():
     max_retries = ai_cfg.get("max_retries", 3)
     retry_delay = ai_cfg.get("retry_delay", 1)
     if providers:
-        from scripts.ai_client import APIProviderPool, init_pool, set_tags_model
+        from scripts.ai_client import APIProviderPool, init_pool, set_tags_model, get_pool, test_api_availability, print_api_test_report
         init_pool(providers, concurrency)
         logger.info(f"AI Provider 池: {len(providers)} 个 Key, 并发: {concurrency}")
+
+        # 测试 API 可用性
+        pool = get_pool()
+        api_results = test_api_availability(pool)
+        print_api_test_report(api_results)
 
         # Level 3: 模型路由 — 标签提取使用更便宜模型
         tags_model_cfg = ai_cfg.get("tags_model")
