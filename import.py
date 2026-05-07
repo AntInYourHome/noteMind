@@ -116,13 +116,16 @@ def _update_frontmatter_tags(file_path: str, tags: list[str]):
         logger.warning(f"  更新标签失败 {file_path}: {e}")
 
 
-def archive_source(file_path: str, vault_path: str, archive_dir: str, remove_source: bool = True) -> str:
-    """将原始文件归档到 Vault。
+def archive_source(file_path: str, vault_path: str, category: str, remove_source: bool = True) -> str:
+    """将原始文件按分类归档到对应目录（与 MD 笔记同目录）。
 
     Args:
+        file_path: 源文件路径
+        vault_path: Vault 根目录
+        category: 分类路径（如 "安全/操作系统安全/HarmonyOS"）
         remove_source: 归档成功后是否从源目录删除（默认 True）
     """
-    archive_path = os.path.join(vault_path, archive_dir, os.path.basename(file_path))
+    archive_path = os.path.join(vault_path, category, os.path.basename(file_path))
     os.makedirs(os.path.dirname(archive_path), exist_ok=True)
     shutil.copy2(file_path, archive_path)  # 先复制
     if remove_source:
@@ -252,6 +255,26 @@ def _handle_image_file(file_path, cfg, vault_path, fname, safe_name) -> dict:
     }
 
 
+def _classify_document(text: str, title: str, categories: dict, tags: list[str]) -> tuple[str, list[str]]:
+    """分类文档：优先使用动态分类器，回退到静态分类器。"""
+    vault_path = load_config()["vault"]["path"]
+    db_path = os.path.join(vault_path, ".notemind_memory.db")
+
+    # 尝试动态分类
+    if os.path.exists(db_path):
+        try:
+            from scripts.dynamic_classifier import DynamicClassifier
+            classifier = DynamicClassifier(db_path)
+            doc_id = Path(title).stem
+            return classifier.classify(text=text, title=title, tags=tags, doc_id=doc_id)
+        except Exception as e:
+            logger.warning(f"  [分类] 动态分类失败: {e}，回退到静态分类")
+
+    # 回退到静态分类
+    from scripts.classifier import classify
+    return classify(text, categories, title)
+
+
 def _handle_document_file(parse_result, file_path, cfg, vault_path, fname, safe_name, cleanup_paths) -> dict:
     """处理文档文件（PDF/DOCX/PPTX 等）：归档原文，只生成摘要 MD。"""
     from scripts.analyzer import AnalysisContext
@@ -285,13 +308,15 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, fname, safe_
         )
         logger.info(f"  AI 分析完成 (共 {len(analysis.sections)} 章)")
 
-        # 分类
+        # 分类（优先使用动态分类器，回退到静态分类）
         classify_input = ""
         for sr in analysis.sections:
             if sr.get("summary"):
                 classify_input += sr["summary"] + "\n"
         if classify_input.strip():
-            category, doc_type_tags = classify(classify_input, categories, title=fname)
+            category, doc_type_tags = _classify_document(
+                classify_input, fname, categories, analysis.tags or []
+            )
         else:
             category, doc_type_tags = "其他", []
 
@@ -362,7 +387,9 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, fname, safe_
         if analysis.image_descriptions:
             classify_input += analysis.image_descriptions[0][:200]
 
-        category, doc_type_tags = classify(classify_input, categories, title=fname)
+        category, doc_type_tags = _classify_document(
+            classify_input, fname, categories, analysis.tags or []
+        )
         all_tags = (analysis.tags or []) + doc_type_tags
 
         date_str = datetime.now().strftime("%Y-%m-%d")
@@ -429,8 +456,8 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, fname, safe_
         md5 = compute_md5(file_path)
         add_to_index(file_path, md5, category, dest_path, vault_path, dedup_index)
 
-    # 归档原始文件（成功后删除源文件）
-    archive_source(file_path, vault_path, cfg["import"]["archive_dir"], remove_source=True)
+    # 归档原始文件到分类目录（成功后删除源文件）
+    archive_source(file_path, vault_path, category, remove_source=True)
 
     cleanup_paths.clear()
 
