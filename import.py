@@ -218,7 +218,7 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
         # 临时分类（后续会用 AI 分析后的摘要重新分类）
         classify_input = " ".join(s.title for s in parse_result.sections if s.title)[:300]
         categories = cfg["vault"].get("categories", ["其他"])
-        category = classify(classify_input, categories) if classify_input else "其他"
+        category = classify(classify_input, categories, title=fname) if classify_input else "其他"
 
         # 先写索引文件（tags 暂为空，后续回填）
         builder = MarkdownBuilder(fname, date_str)
@@ -277,7 +277,7 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
             if sr.get("summary"):
                 classify_input2 += sr["summary"] + "\n"
         if classify_input2.strip():
-            category = classify(classify_input2, categories)
+            category = classify(classify_input2, categories, title=fname)
 
         # 更新索引文件 frontmatter 标签
         if analysis_tags:
@@ -316,9 +316,7 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
             classify_input += analysis.image_descriptions[0][:200]
 
         categories = cfg["vault"].get("categories", ["其他"])
-        category = classify(classify_input, categories)
-
-        # 4. 归档
+        category = classify(classify_input, categories, title=fname)
         archive_source(file_path, vault_path, cfg["import"]["archive_dir"])
 
         # 5. 复制图片
