@@ -13,8 +13,9 @@ import sqlite3
 logger = logging.getLogger("notemind")
 
 # 分类阈值
-MATCH_THRESHOLD = 0.65       # 直接匹配阈值
-AI_VALIDATE_THRESHOLD = 0.45 # AI 验证下限
+MATCH_THRESHOLD = 0.65       # embedding 直接匹配阈值
+AI_VALIDATE_THRESHOLD = 0.45 # embedding AI 验证下限
+KEYWORD_MATCH_THRESHOLD = 0.2  # 关键词匹配阈值（离线模式，初期关键词少）
 
 
 class DynamicClassifier:
@@ -82,17 +83,24 @@ class DynamicClassifier:
         if not level1:
             return "其他", []
 
-        # Step 2: 计算 embedding
+        # Step 2: 计算 embedding（在线）或提取关键词（离线）
+        embedding = None
         try:
             from scripts.ai_client import generate_embedding
             embedding = generate_embedding(text[:8000])
         except Exception as e:
-            logger.warning(f"  [动态分类] Embedding 失败: {e}，回退到静态分类")
-            return _fallback_classify(text, title)
+            logger.debug(f"  [动态分类] Embedding 不可用: {e}")
 
         if not embedding:
-            logger.warning("  [动态分类] Embedding 为空，回退到静态分类")
-            return _fallback_classify(text, title)
+            # 离线模式：使用关键词匹配降级
+            level2, level3 = self._classify_by_keywords(text, title, level1, doc_id)
+            doc_type_tags = _extract_doc_type_tags(text, title)
+            parts = [level1]
+            if level2:
+                parts.append(level2)
+            if level3:
+                parts.append(level3)
+            return "/".join(parts), doc_type_tags
 
         # Step 3: 查找候选主题群
         candidates = self._find_candidates(level1, embedding, top_k=10)
@@ -174,6 +182,102 @@ class DynamicClassifier:
         conn.close()
         candidates.sort(key=lambda x: x["score"], reverse=True)
         return candidates[:top_k]
+
+    def _classify_by_keywords(self, text: str, title: str, level1: str,
+                               doc_id: str) -> tuple[str | None, str | None]:
+        """离线模式：基于关键词匹配分类。
+
+        策略：提取文档中的 2-4 字关键词，与 topic_keywords 表比对，
+        得分最高的主题群即为分类结果。
+        """
+        candidates = self._find_candidates_by_keywords(level1, text, title)
+
+        if candidates and candidates[0]["score"] >= KEYWORD_MATCH_THRESHOLD:
+            best = candidates[0]
+            self._assign_to_topic_keyword(doc_id, best["id"], best["score"])
+            logger.info(f"  [动态分类] 关键词匹配: {best['name']} (score={best['score']:.3f})")
+            return best.get("level2"), best.get("level3")
+
+        # 无匹配：AI 创建新主题（如果 AI 可用）
+        try:
+            level2, level3 = self._create_new_topic(doc_id, text, title, level1, None)
+            logger.info(f"  [动态分类] 无匹配，创建新主题: {level2}/{level3}")
+            return level2, level3
+        except Exception:
+            logger.warning("  [动态分类] AI 不可用，回退到一级分类")
+            return None, None
+
+    def _find_candidates_by_keywords(self, level1: str, text: str,
+                                      title: str, top_k: int = 10) -> list[dict]:
+        """关键词匹配：比对 topic_keywords 表。"""
+        import re
+
+        # 提取文档关键词（2-4 字中文词组 + 已有标签）
+        doc_keywords = set()
+        # 从文本中提取常见中文词组
+        for n in range(2, 5):
+            for match in re.finditer(r'[\u4e00-\u9fff]{' + str(n) + r'}', text[:3000]):
+                word = match.group()
+                # 过滤停用词
+                if len(word) >= 2:
+                    doc_keywords.add(word)
+        # 加入标题
+        for match in re.finditer(r'[\u4e00-\u9fff]{2,6}', title):
+            doc_keywords.add(match.group())
+
+        conn = sqlite3.connect(self.db_path)
+        rows = conn.execute(
+            "SELECT id, name, level2, level3, doc_count FROM topic_clusters "
+            "WHERE level1 = ? AND status = 'active'",
+            (level1,)
+        ).fetchall()
+
+        candidates = []
+        for row in rows:
+            topic_id = row[0]
+            # 获取该主题的关键词
+            kw_rows = conn.execute(
+                "SELECT keyword, weight FROM topic_keywords WHERE topic_id = ?",
+                (topic_id,)
+            ).fetchall()
+            topic_kw = {r[0]: r[1] for r in kw_rows}
+
+            if not topic_kw:
+                # 没有关键词的主题，跳过
+                continue
+
+            # 计算匹配得分：匹配关键词的权重和 / 总权重
+            matched_score = sum(w for kw, w in topic_kw.items() if kw in doc_keywords)
+            total_score = sum(topic_kw.values())
+            score = matched_score / total_score if total_score > 0 else 0.0
+
+            if score > 0:
+                candidates.append({
+                    "id": topic_id,
+                    "name": row[1],
+                    "level2": row[2],
+                    "level3": row[3],
+                    "score": score,
+                    "doc_count": row[4],
+                })
+
+        conn.close()
+        candidates.sort(key=lambda x: x["score"], reverse=True)
+        return candidates[:top_k]
+
+    def _assign_to_topic_keyword(self, doc_id: str, topic_id: int, score: float):
+        """关键词模式下分配文档（不更新 centroid）。"""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute(
+            "UPDATE topic_clusters SET doc_count = doc_count + 1 WHERE id = ?",
+            (topic_id,)
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO topic_members (topic_id, doc_id, score) VALUES (?, ?, ?)",
+            (topic_id, doc_id, score)
+        )
+        conn.commit()
+        conn.close()
 
     def _assign_to_topic(self, doc_id: str, topic_id: int, score: float):
         """将文档分配给主题群，更新 centroid 和 doc_count。"""
@@ -260,13 +364,16 @@ class DynamicClassifier:
             logger.warning(f"  [动态分类] AI 创建主题失败: {e}，回退到一级分类")
             return None, None
 
-        dim = len(embedding)
-        # 归一化 embedding
-        norm = math.sqrt(sum(x * x for x in embedding))
-        if norm > 0:
-            normalized = [x / norm for x in embedding]
-        else:
-            normalized = embedding[:]
+        # 存储 embedding（离线模式可能为空）
+        centroid_blob = None
+        if embedding:
+            dim = len(embedding)
+            norm = math.sqrt(sum(x * x for x in embedding))
+            if norm > 0:
+                normalized = [x / norm for x in embedding]
+            else:
+                normalized = embedding[:]
+            centroid_blob = struct.pack(f"{dim}f", *normalized)
 
         conn = sqlite3.connect(self.db_path)
         try:
@@ -274,8 +381,7 @@ class DynamicClassifier:
                 "INSERT OR IGNORE INTO topic_clusters "
                 "(name, level1, level2, level3, description, centroid_embedding, doc_count) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (name, level1, level2, level3, description,
-                 struct.pack(f"{dim}f", *normalized), 1)
+                (name, level1, level2, level3, description, centroid_blob, 1)
             )
             topic_id = cursor.lastrowid
             # 如果没有插入（重复名称），获取已有 ID
