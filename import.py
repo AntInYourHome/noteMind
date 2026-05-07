@@ -135,22 +135,6 @@ def move_to_failed(file_path: str, vault_path: str, failed_dir: str, error: str)
     return failed_path
 
 
-def copy_images_to_vault(images: list[str], source_name: str, vault_path: str) -> list[str]:
-    """将提取的图片复制到 Vault，返回 vault 内的相对路径列表。"""
-    img_folder = os.path.join(vault_path, ".notemind_assets", source_name)
-    os.makedirs(img_folder, exist_ok=True)
-
-    vault_paths = []
-    for i, img_path in enumerate(images):
-        ext = os.path.splitext(img_path)[1].lower()
-        safe_name = f"{source_name}_{i}{ext}"
-        dest = os.path.join(img_folder, safe_name)
-        shutil.copy2(img_path, dest)
-        vault_paths.append(os.path.join(".notemind_assets", source_name, safe_name))
-
-    return vault_paths
-
-
 def handle_file(file_path: str, cfg: dict, vault_path: str) -> dict:
     """处理单个文件的完整流程。
 
@@ -187,7 +171,10 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
     from scripts.analyzer import AnalysisContext
     from scripts.classifier import classify
     from scripts.builder import MarkdownBuilder
-    from scripts.parsers import get_parser
+    from scripts.parsers import get_parser, IMAGE_EXTS
+
+    # 判断是否为纯图片文件
+    is_image_file = Path(fname).suffix.lower() in IMAGE_EXTS
 
     # 1. 解析
     parse_result, error = parse_with_retry(
@@ -196,24 +183,93 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
     if parse_result is None:
         return {"status": "fail", "error": error}
 
+    # 纯图片文件：走不同的处理流程（归档图片到分类目录，创建引用图片的 MD）
+    if is_image_file:
+        return _handle_image_file(file_path, cfg, vault_path, fname, safe_name)
+
+    # 文档文件（PDF/DOCX/PPTX 等）：不复制图片到 vault，只生成摘要 MD
+    return _handle_document_file(
+        parse_result, file_path, cfg, vault_path, fname, safe_name, cleanup_paths
+    )
+
+
+def _handle_image_file(file_path, cfg, vault_path, fname, safe_name) -> dict:
+    """处理纯图片文件：归档图片到分类目录，创建引用图片的 MD 文档。"""
+    from scripts.ai_client import analyze_image, generate_tags
+    from scripts.classifier import classify
+    from scripts.builder import MarkdownBuilder
+
+    # 1. 分析图片
+    try:
+        if analyze_image.__self__ if hasattr(analyze_image, '__self__') else True:
+            desc = analyze_image(file_path)
+    except Exception as e:
+        desc = f"（图片分析失败: {e}）"
+
+    # 2. 分类
+    categories = cfg["vault"].get("categories", {"其他": []})
+    category, doc_type_tags = classify(desc, categories, title=fname)
+
+    # 3. 提取标签
+    try:
+        tags = generate_tags(desc)
+    except Exception:
+        tags = []
+    all_tags = (tags or []) + doc_type_tags
+
+    # 4. 归档图片到分类目录（而非 _archive/）
+    dest_dir = os.path.join(vault_path, category)
+    os.makedirs(dest_dir, exist_ok=True)
+    dest_img = os.path.join(dest_dir, fname)
+    shutil.copy2(file_path, dest_img)
+
+    # 5. 创建 MD 文档，引用同目录下的图片
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    builder = MarkdownBuilder(fname, date_str)
+    builder.add_frontmatter(category, all_tags, source_path=file_path).add_title()
+    builder.add_file_summary(desc)
+    # 引用同目录下的图片
+    builder.add_images([fname], [desc])
+    builder.add_tags_section(all_tags).add_footer()
+
+    md_name = f"{date_str}-{safe_name}.md"
+    dest_path = os.path.join(dest_dir, md_name)
+    with open(dest_path, "w", encoding="utf-8") as f:
+        f.write(builder.build())
+
+    return {
+        "status": "ok",
+        "path": dest_path,
+        "category": category,
+        "tags": all_tags,
+        "summary": desc,
+    }
+
+
+def _handle_document_file(parse_result, file_path, cfg, vault_path, fname, safe_name, cleanup_paths) -> dict:
+    """处理文档文件（PDF/DOCX/PPTX 等）：归档原文，只生成摘要 MD。"""
+    from scripts.analyzer import AnalysisContext
+    from scripts.classifier import classify
+    from scripts.builder import MarkdownBuilder
+
     text_count = len(parse_result.text) if parse_result.text else 0
     img_count = len(parse_result.images)
     section_count = len(parse_result.sections)
-    logger.info(f"  提取: {text_count} 字符, {img_count} 张图片, {section_count} 个章节")
+    logger.info(f"  提取: {text_count} 字符, {img_count} 张内嵌图片, {section_count} 个章节")
 
-    # 2. AI 分析（自动选择短文档/长文档策略）
+    # AI 分析（图片仅用 OCR 文本，不复制到 vault）
     parse_section_count = len(parse_result.sections)
     parse_text_len = len(parse_result.text) if parse_result.text else 0
     split_sections = cfg["import"].get("split_threshold_sections", 5)
     split_chars = cfg["import"].get("split_threshold_chars", 10000)
     should_split = parse_section_count >= split_sections or parse_text_len >= split_chars
+    categories = cfg["vault"].get("categories", {"其他": []})
 
     if should_split:
         # 大文档：流式分析，逐章输出即写磁盘
         date_str = datetime.now().strftime("%Y-%m-%d")
         safe_name = Path(fname).stem.replace(" ", "_")
 
-        # 先构建章节链接列表
         section_links = []
         for i, sec in enumerate(parse_result.sections):
             title = sec.title or f"第{i+1}章"
@@ -221,15 +277,12 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
             link_name = f"{date_str}-{safe_name}-{i+1:02d}-{safe_title}"
             section_links.append((link_name, title))
 
-        # 临时分类（后续会用 AI 分析后的摘要重新分类）
         classify_input = " ".join(s.title for s in parse_result.sections if s.title)[:300]
-        categories = cfg["vault"].get("categories", {"其他": []})
         if classify_input:
             category, doc_type_tags = classify(classify_input, categories, title=fname)
         else:
             category, doc_type_tags = "其他", []
 
-        # 先写索引文件（tags 暂为空，后续回填）
         builder = MarkdownBuilder(fname, date_str)
         builder.add_frontmatter(category, [], source_path=file_path)
         builder.add_file_summary("")
@@ -237,50 +290,38 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
         os.makedirs(dest_dir, exist_ok=True)
         index_filename = f"{date_str}-{safe_name}.md"
         index_path = os.path.join(dest_dir, index_filename)
-        cleanup_paths.append(index_path)  # 失败时清理
+        cleanup_paths.append(index_path)
         index_content = builder.build_index(section_links, source_path=file_path)
         with open(index_path, "w", encoding="utf-8") as f:
             f.write(index_content)
         logger.info(f"  [INDEX] {index_filename} ({len(section_links)} 个章节)")
 
-        # 流式分析：每章完成即写磁盘（tags 暂为空）
         parent_name = f"{date_str}-{safe_name}"
-        chapter_paths_list = []  # 记录所有章节文件路径
+        chapter_paths_list = []
 
         def on_section_done(index, total, section_result):
-            """每章分析完成后立即写磁盘。"""
             title = section_result.get("title", f"第{index+1}章") or f"第{index+1}章"
             safe_title = title.replace(" ", "_").replace("/", "_").replace("\\", "_")
             link_name = f"{date_str}-{safe_name}-{index+1:02d}-{safe_title}"
-
             chapter_content = builder.build_section_note(
-                section=section_result,
-                parent_name=parent_name,
-                tags=[],
-                source_path=file_path,
+                section=section_result, parent_name=parent_name, tags=[], source_path=file_path,
             )
             chapter_path = os.path.join(dest_dir, f"{link_name}.md")
-            cleanup_paths.append(chapter_path)  # 失败时清理
+            cleanup_paths.append(chapter_path)
             chapter_paths_list.append(chapter_path)
             with open(chapter_path, "w", encoding="utf-8") as f:
                 f.write(chapter_content)
             logger.info(f"  [OK] 章节 [{index+1}/{total}] {title} → {link_name}.md")
 
-        # 合并章节配置：每 5 页合并为一次 API 调用
         chunk_size = cfg.get("performance", {}).get("chunk_size", 5)
-
         analysis = AnalysisContext().analyze(
             parse_result.text, parse_result.images, parse_result.sections,
             max_workers=5, callback=on_section_done, chunk_size=chunk_size,
             image_ocr_texts=parse_result.image_ocr_texts
         )
-
         logger.info(f"  AI 分析完成 (流式，共 {len(analysis.sections)} 章)")
 
-        # === AI 分析完成后，回填标签 ===
         analysis_tags = analysis.tags if analysis.tags else []
-
-        # 重新分类（用 AI 完整摘要）
         classify_input2 = ""
         for sr in analysis.sections:
             if sr.get("summary"):
@@ -288,38 +329,23 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
         if classify_input2.strip():
             category, doc_type_tags = classify(classify_input2, categories, title=fname)
 
-        # 合并 AI 标签和文档类型标签
         all_tags = analysis_tags + doc_type_tags
-
-        # 更新索引文件 frontmatter 标签
         if all_tags:
             _update_frontmatter_tags(index_path, all_tags)
-            logger.info(f"  索引文件标签已回填: {len(all_tags)} 个")
-
-        # 更新所有章节文件 frontmatter 标签
         for cp in chapter_paths_list:
             if os.path.exists(cp):
                 _update_frontmatter_tags(cp, all_tags)
-        logger.info(f"  章节文件标签已回填: {len(chapter_paths_list)} 个文件")
 
-        # 归档原始文件
-        archive_source(file_path, vault_path, cfg["import"]["archive_dir"])
-
-        # 复制图片
-        vault_image_paths = []
-        if parse_result.images:
-            vault_image_paths = copy_images_to_vault(parse_result.images, safe_name, vault_path)
-            logger.info(f"  复制 {len(vault_image_paths)} 张图片到 Vault")
+        dest_path = index_path
 
     else:
-        # 短文档：原有逻辑不变
+        # 短文档
         analysis = AnalysisContext().analyze(
             parse_result.text, parse_result.images, parse_result.sections, max_workers=5,
             image_ocr_texts=parse_result.image_ocr_texts
         )
         logger.info(f"  AI 分析完成 (并发模式)")
 
-        # 3. 分类
         classify_input = ""
         for sr in analysis.sections:
             if sr.get("summary"):
@@ -327,20 +353,11 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
         if analysis.image_descriptions:
             classify_input += analysis.image_descriptions[0][:200]
 
-        categories = cfg["vault"].get("categories", {"其他": []})
         category, doc_type_tags = classify(classify_input, categories, title=fname)
-        archive_source(file_path, vault_path, cfg["import"]["archive_dir"])
+        all_tags = (analysis.tags or []) + doc_type_tags
 
-        # 5. 复制图片
-        vault_image_paths = []
-        if parse_result.images:
-            vault_image_paths = copy_images_to_vault(parse_result.images, safe_name, vault_path)
-            logger.info(f"  复制 {len(vault_image_paths)} 张图片到 Vault")
-
-        # 6. 构建 Markdown（短文档：单文件输出）
         date_str = datetime.now().strftime("%Y-%m-%d")
         safe_name = Path(fname).stem.replace(" ", "_")
-        all_tags = (analysis.tags or []) + doc_type_tags
         builder = MarkdownBuilder(fname, date_str)
         builder.add_frontmatter(category, all_tags, source_path=file_path).add_title()
 
@@ -348,9 +365,7 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
             builder.add_file_summary(analysis.sections[0].get("summary", ""))
 
         builder.add_sections(analysis.sections)
-
-        if vault_image_paths:
-            builder.add_images(vault_image_paths, analysis.image_descriptions)
+        # 不复制内嵌图片到 vault，不生成图片存档段落
 
         builder.add_tags_section(all_tags).add_footer()
 
@@ -366,22 +381,20 @@ def _handle_file_impl(file_path, cfg, vault_path, fname, safe_name, cleanup_path
                 dest_path = os.path.join(dest_dir, f"{base}_{counter}{ext}")
                 counter += 1
 
-        cleanup_paths.append(dest_path)  # 失败时清理
+        cleanup_paths.append(dest_path)
         with open(dest_path, "w", encoding="utf-8") as f:
             f.write(builder.build())
 
-    # 拆分模式下 dest_path 用索引文件路径
-    if should_split:
-        dest_path = index_path
+    # 归档原始文件
+    archive_source(file_path, vault_path, cfg["import"]["archive_dir"])
 
-    # 8. 更新去重索引
+    # 更新去重索引
     if cfg["import"].get("dedup", True):
         from scripts.dedup import compute_md5, add_to_index
         dedup_index = cfg["import"].get("dedup_index", ".notemind_index.json")
         md5 = compute_md5(file_path)
         add_to_index(file_path, md5, category, dest_path, vault_path, dedup_index)
 
-    # 成功时清空清理列表（不删除文件）
     cleanup_paths.clear()
 
     return {
@@ -625,17 +638,15 @@ def main():
         if not args.dry_run:
             update_moc(vault_path)
 
-        # Provider 健康报告（多模型配置时）
+        from scripts.ai_client import get_pool, print_log_analysis, get_perf_stats, reset_perf_stats
         pool = get_pool()
         if pool:
             pool.print_health_report()
 
         # 日志分析（从日志文件中识别限流等问题）
-        from scripts.ai_client import print_log_analysis
         print_log_analysis(log_file)
 
         # 性能报告
-        from scripts.ai_client import get_perf_stats, reset_perf_stats
         perf = get_perf_stats()
         if perf["api_calls"] > 0:
             avg_latency = perf["total_latency"] / perf["api_calls"]
