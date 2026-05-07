@@ -118,9 +118,64 @@ def parse_pdf(file_path: str) -> ParseResult:
 
             sections.append(Section(f"第 {page_num} 页", page_content, page_images))
 
+        # 尝试用真实标题替换 "第 X 页"
+        sections = _infer_section_titles(sections)
+
         return ParseResult(full_text, all_images, sections, all_image_ocr)
     except ImportError:
         return ParseResult("", [])
+
+
+def _infer_section_titles(sections: list) -> list:
+    """从 PDF 页面文本中提取真实标题，替换 "第 X 页"。
+
+    策略：
+      1. 每页首行中文文本作为候选标题
+      2. 如果标题是页码/页眉/页脚（如 "第 X 页"、"HarmonyOS 6.0..."），跳过
+      3. 合并相邻相同标题的页面
+    """
+    import re
+
+    # 页眉/页脚模式
+    skip_patterns = [
+        re.compile(r'^第\s*\d+\s*页'),        # 页码
+        re.compile(r'^HarmonyOS\s*\d'),       # 页眉
+        re.compile(r'^\d+$'),                  # 纯数字页码
+        re.compile(r'^\s*$'),                  # 空行
+        re.compile(r'^[\u4e00-\u9fff]{1,2}$'), # 单字/双字（可能是页眉标记）
+    ]
+
+    for sec in sections:
+        # 从页面文本中提取首行有意义的中文标题
+        lines = sec.text.split('\n')
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            # 跳过页眉页脚
+            if any(p.match(line) for p in skip_patterns):
+                continue
+            # 取第一个有意义的行作为标题
+            # 提取该行中的中文部分（最多 30 字）
+            chinese = re.findall(r'[\u4e00-\u9fff][\u4e00-\u9fff\w\s·.]{2,29}', line)
+            if chinese:
+                title = chinese[0].strip()
+                if len(title) >= 3 and len(title) <= 30:
+                    sec.title = title
+                    break
+
+    # 合并连续相同标题的页面
+    merged = []
+    for sec in sections:
+        if merged and merged[-1].title == sec.title and merged[-1].title != f"第 {len(merged)} 页":
+            # 合并文本和图片
+            prev = merged[-1]
+            prev.text = prev.text + "\n\n" + sec.text
+            prev.images.extend(sec.images)
+        else:
+            merged.append(sec)
+
+    return merged if merged else sections
 
 
 def parse_docx(file_path: str) -> ParseResult:

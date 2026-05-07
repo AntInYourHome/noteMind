@@ -576,6 +576,66 @@ def _call_api(messages: list, max_tokens: int = 500, retries: int = None,
 
 # --- 业务函数 ---
 
+def test_api_availability(pool: "APIProviderPool") -> dict:
+    """测试所有 provider 的 API 可用性。
+
+    Returns:
+        {"total": n, "available": n, "unavailable": n, "details": [...]}
+    """
+    results = {"total": 0, "available": 0, "unavailable": 0, "details": []}
+
+    for i, provider in enumerate(pool.providers):
+        tracker = pool._trackers[i]
+        model = provider.get("model", "unknown")
+        base_url = provider.get("base_url", "")
+        results["total"] += 1
+
+        try:
+            result = pool.call(
+                [{"role": "user", "content": "回复OK"}],
+                max_tokens=10,
+                retries=1,
+            )
+            content = result.get("content", "") if isinstance(result, dict) else ""
+            if content:
+                results["available"] += 1
+                results["details"].append({
+                    "model": model,
+                    "status": "可用",
+                    "latency": result.get("latency", 0),
+                })
+                tracker.record_success()
+            else:
+                raise RuntimeError("空响应")
+        except Exception as e:
+            results["unavailable"] += 1
+            results["details"].append({
+                "model": model,
+                "status": f"不可用: {e}",
+            })
+
+    return results
+
+
+def print_api_test_report(results: dict):
+    """打印 API 可用性测试报告。"""
+    logger.info("=" * 50)
+    logger.info("API 可用性测试")
+    logger.info("=" * 50)
+    for d in results["details"]:
+        icon = "✅" if "可用" in d["status"] and d["status"] == "可用" else "❌"
+        if d["status"] == "可用":
+            logger.info(f"  {icon} {d['model']} | 延迟: {d.get('latency', 0):.2f}s | 状态: 可用")
+        else:
+            logger.info(f"  {icon} {d['model']} | 状态: {d['status']}")
+    logger.info("-" * 50)
+    logger.info(
+        f"  总计: {results['total']} | 可用: {results['available']} | "
+        f"不可用: {results['unavailable']}"
+    )
+    logger.info("=" * 50)
+
+
 def analyze_image(image_path: str) -> str:
     """分析图片内容，返回概要。使用本地 MiniMind-V 模型。
 
@@ -639,6 +699,7 @@ def reset_perf_stats():
 
 _SUMMARY_SYSTEM = "你是文档摘要专家。用中文提取核心要点，控制在 300 字以内。"
 _TAGS_SYSTEM = "你是关键词提取专家。从内容中提取 3-8 个中文标签，用逗号分隔。"
+_OUTLINE_SYSTEM = "你是文档结构分析专家。根据各章节摘要，提取文档的一级/二级章节标题列表，每行一个，使用 '- ' 开头。不要包含页码、重复项或太细的子章节。只输出标题列表。"
 
 
 def generate_summary(text: str) -> str:
@@ -699,6 +760,61 @@ def generate_tags(text: str) -> list[str]:
     except Exception:
         _perf_stats["errors"] += 1
         raise
+
+
+def generate_outline(section_summaries: list[dict]) -> list[str]:
+    """从章节摘要列表中提取文档大纲（一级/二级章节标题）。
+
+    Args:
+        section_summaries: [{"title": "...", "summary": "..."}, ...]
+
+    Returns:
+        ["- 第一章 概述", "- 第二章 安全架构", ...]
+    """
+    if not section_summaries:
+        return []
+
+    # 构建输入：每行 "标题: 摘要"
+    lines = []
+    for s in section_summaries:
+        title = s.get("title", "")
+        summary = s.get("summary", "")[:100]
+        if title and summary:
+            lines.append(f"{title}: {summary}")
+        elif title:
+            lines.append(title)
+
+    combined = "\n".join(lines)[:5000]
+    if not combined.strip():
+        return []
+
+    messages = [
+        {"role": "system", "content": _OUTLINE_SYSTEM},
+        {"role": "user", "content": combined},
+    ]
+
+    try:
+        result = _call_api(messages, max_tokens=500)
+        _perf_stats["api_calls"] += 1
+        _perf_stats["input_tokens"] += result.get("input_tokens", 0)
+        _perf_stats["output_tokens"] += result.get("output_tokens", 0)
+        _perf_stats["total_latency"] += result.get("latency", 0)
+        content = result.get("content", "")
+        # 解析输出：提取以 "- " 开头的行
+        outline = [line for line in content.strip().split("\n")
+                   if line.startswith("- ") and len(line.strip()) > 2]
+        return outline[:30]  # 最多 30 个章节标题
+    except Exception:
+        _perf_stats["errors"] += 1
+        # fallback：去重后的原始标题
+        seen = set()
+        fallback = []
+        for s in section_summaries:
+            t = s.get("title", "")
+            if t and t not in seen and len(t) > 3:
+                seen.add(t)
+                fallback.append(f"- {t}")
+        return fallback[:20]
 
 
 # --- 日志分析 ---
