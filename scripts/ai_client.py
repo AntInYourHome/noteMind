@@ -577,42 +577,37 @@ def _call_api(messages: list, max_tokens: int = 500, retries: int = None,
 # --- 业务函数 ---
 
 def analyze_image(image_path: str) -> str:
-    """分析图片内容，返回概要。使用多模态 provider。
+    """分析图片内容，返回概要。使用本地 MiniMind-V 模型。
 
-    如果所有多模态 provider 已降级，返回占位文本。
+    如果本地 VLM 不可用，抛出 ValueError 让调用方使用 OCR 降级。
     """
-    if not get_pool().has_multimodal_provider():
-        logger.warning("[降级] 无可用多模态 provider，跳过图片分析")
-        return "（图片分析已跳过：provider 限流降级）"
+    if not _use_local_vlm():
+        raise ValueError("本地 VLM 不可用（未启用或模型文件缺失），跳过图片分析")
 
-    with open(image_path, "rb") as f:
-        image_b64 = base64.b64encode(f.read()).decode("utf-8")
+    try:
+        from scripts.vlm_local import describe_image
+        desc = describe_image(image_path)
+        if desc and desc.strip():
+            return desc.strip()
+    except Exception as e:
+        raise ValueError(f"本地 VLM 推理失败: {e}")
 
-    ext = os.path.splitext(image_path)[1].lower()
-    mime_map = {".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png", ".gif": "gif", ".bmp": "bmp", ".webp": "webp"}
-    mime = f"image/{mime_map.get(ext, 'jpeg')}"
 
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": (
-                        "请用简洁的中文描述这张图片的内容，"
-                        "包括图片类型、主要元素、可能的用途。"
-                        "控制在 200 字以内。"
-                    ),
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{mime};base64,{image_b64}"},
-                },
-            ],
-        }
-    ]
+# --- 本地 VLM 开关 ---
 
-    return _call_api(messages, max_tokens=500, multimodal=True)
+def _use_local_vlm() -> bool:
+    """检查是否启用本地 VLM 推理。"""
+    env_val = os.environ.get("NOTEMIND_LOCAL_VLM", "auto")
+    if env_val == "0" or env_val.lower() == "false":
+        return False
+    if env_val == "1" or env_val.lower() == "true":
+        return True
+    # auto: 检查文件是否存在
+    try:
+        from scripts.vlm_local import is_available
+        return is_available()
+    except ImportError:
+        return False
 
 
 # --- 性能统计全局计数器 ---

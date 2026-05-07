@@ -1,6 +1,7 @@
 """
 NoteMind AI 分析策略 — 短文档单摘要 vs 长文档逐章摘要
 标签优化：一篇文档只生成一次标签，从全文生成，不逐章/逐图片生成
+图片描述：OCR 先行，文字不足时调用 MiniMind-V 本地模型补充。
 """
 
 import logging
@@ -43,6 +44,27 @@ class AnalysisResult:
         self.image_descriptions = []
 
 
+def _describe_image(img_path: str, ocr_text: str = "") -> str:
+    """图片描述：OCR 先行，文字不足时调用 MiniMind-V 本地模型。
+
+    策略：
+      1. OCR 提取了 >20 字 → 直接用（快速、精确）
+      2. OCR 无结果或文字太少 → 调用 MiniMind-V 场景描述（~3s）
+    """
+    if ocr_text and len(ocr_text.strip()) > 20:
+        return ocr_text.strip()
+
+    # OCR 文字不足，调用本地 VLM
+    try:
+        from scripts.ai_client import analyze_image
+        return analyze_image(img_path)
+    except (ValueError, Exception) as e:
+        # VLM 不可用：回退到 OCR 或跳过
+        if ocr_text and ocr_text.strip():
+            return ocr_text.strip()
+        raise ValueError(f"图片描述失败: {e}")
+
+
 class ShortDocStrategy:
     """短文档策略：全文一个摘要 + 一次标签。"""
 
@@ -55,20 +77,15 @@ class ShortDocStrategy:
             # 标签从全文生成，不是逐图片生成
             result.tags = _clean_tags(generate_tags(text))
 
-        # 图片只生成描述，不生成标签
+        # 图片描述：OCR 先行，VLM 补充
         for i, img_path in enumerate(images):
             try:
                 ocr_text = ""
                 if image_ocr_texts and i < len(image_ocr_texts):
                     ocr_text = image_ocr_texts[i]
-
-                if ocr_text and ocr_text.strip():
-                    result.image_descriptions.append(ocr_text)
-                else:
-                    desc = analyze_image(img_path)
-                    result.image_descriptions.append(desc)
-            except Exception as e:
-                result.image_descriptions.append(f"（图片识别失败: {e}）")
+                result.image_descriptions.append(_describe_image(img_path, ocr_text))
+            except (ValueError, Exception) as e:
+                logger.debug(f"  [图片] 跳过: {e}")
 
         return result
 
@@ -144,19 +161,15 @@ class LongDocStrategy:
 
         logger.info(f"  AI 分组分析完成 (共 {total_chunks} 组 → {total_sections} 章)")
 
-        # 图片只生成描述
+        # 图片描述：OCR 先行，VLM 补充
         for i, img_path in enumerate(images):
             ocr_text = ""
             if image_ocr_texts and i < len(image_ocr_texts):
                 ocr_text = image_ocr_texts[i]
             try:
-                if ocr_text and ocr_text.strip():
-                    result.image_descriptions.append(ocr_text)
-                else:
-                    desc = analyze_image(img_path)
-                    result.image_descriptions.append(desc)
-            except Exception as e:
-                result.image_descriptions.append(f"（图片识别失败: {e}）")
+                result.image_descriptions.append(_describe_image(img_path, ocr_text))
+            except (ValueError, Exception) as e:
+                logger.debug(f"  [图片] 跳过: {e}")
 
     def _analyze_serial(self, sections, images, result, callback, image_ocr_texts=None):
         """串行逐章分析。"""
@@ -189,19 +202,15 @@ class LongDocStrategy:
 
         logger.info(f"  AI 章节分析完成 (共 {total_sections} 章)")
 
-        # 图片只生成描述
+        # 图片描述：OCR 先行，VLM 补充
         for i, img_path in enumerate(images):
             ocr_text = ""
             if image_ocr_texts and i < len(image_ocr_texts):
                 ocr_text = image_ocr_texts[i]
             try:
-                if ocr_text and ocr_text.strip():
-                    result.image_descriptions.append(ocr_text)
-                else:
-                    desc = analyze_image(img_path)
-                    result.image_descriptions.append(desc)
-            except Exception as e:
-                result.image_descriptions.append(f"（图片识别失败: {e}）")
+                result.image_descriptions.append(_describe_image(img_path, ocr_text))
+            except (ValueError, Exception) as e:
+                logger.debug(f"  [图片] 跳过: {e}")
 
     def _analyze_concurrent(self, sections, images, max_workers: int = 5, result=None, callback=None,
                             image_ocr_texts=None):
@@ -228,18 +237,16 @@ class LongDocStrategy:
                 "text": text,
             })
 
-        # 图片任务
+        # 图片任务（OCR 先行，VLM 补充，在 _describe_image 中统一处理）
         for i, img_path in enumerate(images):
             ocr_text = ""
             if image_ocr_texts and i < len(image_ocr_texts):
                 ocr_text = image_ocr_texts[i]
-            if ocr_text and ocr_text.strip():
-                result.image_descriptions.append(ocr_text)
-            else:
-                tasks.append({
-                    "task_type": "image",
-                    "img_path": img_path,
-                })
+            tasks.append({
+                "task_type": "image",
+                "img_path": img_path,
+                "ocr_text": ocr_text,
+            })
 
         # 并发执行
         pool_size = max_workers
@@ -250,7 +257,7 @@ class LongDocStrategy:
             return task, generate_summary(task["text"])
 
         def run_image(task):
-            return task, analyze_image(task["img_path"])
+            return task, _describe_image(task["img_path"], task.get("ocr_text", ""))
 
         with ThreadPoolExecutor(max_workers=pool_size) as executor:
             for task in tasks:
@@ -277,7 +284,10 @@ class LongDocStrategy:
                     completed_sections.add(idx)
 
                 else:  # image
-                    result.image_descriptions.append(result_value)
+                    if isinstance(result_value, str) and result_value.startswith("（失败"):
+                        logger.debug(f"  [图片] 跳过: {result_value}")
+                    else:
+                        result.image_descriptions.append(result_value)
 
         for idx, text in section_texts:
             if idx not in completed_sections:
@@ -333,18 +343,23 @@ class AnalysisContext:
 def _clean_tags(tags: list[str]) -> list[str]:
     """清理和去重标签。
 
-    - 去重
     - 过滤单字标签
     - 过滤太长的标签（>20 字）
+    - 过滤 AI 空响应/占位符
+    - 去重
     - 最多保留 8 个
     """
+    skip_values = {"空响应", "[空响应]", "[]", '["空响应"]', '["空响应"]'}
     seen = set()
     cleaned = []
     for tag in tags:
-        tag = tag.strip()
+        tag = tag.strip().strip("[]'\"。")
         if not tag or len(tag) < 2 or len(tag) > 20:
             continue
-        if tag in seen:
+        if tag in seen or tag in skip_values:
+            continue
+        # 跳过看起来像 JSON 的响应
+        if tag.startswith("[") and tag.endswith("]"):
             continue
         seen.add(tag)
         cleaned.append(tag)

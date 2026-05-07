@@ -37,6 +37,14 @@ inbox/
 *.doc
 *.mdx
 
+# VLM 模型权重（不纳入 git，用户自行下载）
+*.bin
+*.pth
+*.safetensors
+minimind-v/model/
+minimind-v/out/
+minimind-v/modelscope_cache/
+
 # IDE
 .vscode/
 .idea/
