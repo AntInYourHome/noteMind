@@ -949,3 +949,62 @@ def print_log_analysis(log_path: str):
         logger.info(f"  {icon} [{item['severity']}] {item['issue']} × {item['count']}")
         logger.info(f"     建议: {item['advice']}")
     logger.info("=" * 50)
+
+
+# --- Embedding 生成 ---
+
+def generate_embedding(text: str, model: str = "text-embedding-v3",
+                        dimensions: int = 1024) -> list[float]:
+    """生成文本 embedding 向量。
+
+    Args:
+        text: 输入文本
+        model: embedding 模型（默认 text-embedding-v3）
+        dimensions: 向量维度（默认 1024）
+
+    Returns:
+        list of floats (embedding 向量)
+    """
+    if not text or len(text.strip()) < 10:
+        return []
+
+    pool = get_pool()
+    provider, tracker = pool.next_provider()
+    api_key = provider.get("api_key", "")
+    base_url = provider.get("base_url", _DEFAULT_PROVIDER["base_url"])
+
+    url = f"{base_url}/embeddings"
+    payload = json.dumps({
+        "model": model,
+        "input": [text[:8000]],
+        "dimensions": dimensions,
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        url, data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+
+    try:
+        start = time.time()
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            latency = time.time() - start
+            data = json.loads(resp.read().decode("utf-8"))
+            usage = data.get("usage", {})
+            embedding_data = data.get("data", [])
+            if embedding_data:
+                embedding = embedding_data[0].get("embedding", [])
+                tracker.record_success()
+                _perf_stats["api_calls"] += 1
+                _perf_stats["input_tokens"] += usage.get("prompt_tokens", 0)
+                _perf_stats["total_latency"] += latency
+                return embedding
+            raise RuntimeError(f"Embedding API 返回空数据: {data}")
+    except Exception as e:
+        tracker.record_failure(str(e))
+        _perf_stats["errors"] += 1
+        raise

@@ -3,6 +3,7 @@ NoteMind Markdown 构建器 — 将分析结果格式化为 Obsidian Markdown
 建造者模式：逐步构建最终文档
 """
 
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -21,7 +22,7 @@ class MarkdownBuilder:
         Args:
             category: 分类
             tags: 标签列表
-            source_path: 原始文件的完整路径（用于溯源）
+            source_path: 原始文件的完整路径（用于溯源，归档后仅存文件名）
         """
         self._category = category
         self._tags = tags
@@ -33,7 +34,8 @@ class MarkdownBuilder:
             f"tags: [{tags_str}]",
         ]
         if source_path:
-            frontmatter_lines.append(f"original_path: {source_path}")
+            # 归档后原文与 MD 同目录，仅存储文件名
+            frontmatter_lines.append(f"original_path: {os.path.basename(source_path)}")
         self.parts.append("---\n" + "\n".join(frontmatter_lines) + "\n---\n")
         return self
 
