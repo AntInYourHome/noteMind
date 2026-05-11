@@ -174,7 +174,7 @@ OpenHarmony 采用组件化设计，支持软总线、分布式数据管理、�
                 content = f.read()
             check("笔记包含 AI 摘要", "## AI 摘要" in content)
             check("笔记包含标签", "## 标签" in content)
-            check("笔记包含原始内容", "## 完整内容" in content)
+            check("笔记包含归档链接", "## 原始文件" in content and "[[" in content)
 
         # 检查归档
         archive_files = os.listdir(os.path.join(vault, "_archive"))
@@ -240,14 +240,16 @@ def test_dedup_integration():
         )
         check("第一次导入成功", r1.returncode == 0)
 
-        # 第二次导入（应该跳过）
+        # 第二次导入（源文件已被归档删除，应该无新文件）
         r2 = subprocess.run(
             ["python3", str(ROOT / "import.py"), "--source", source, "--vault", vault],
             capture_output=True, text=True, timeout=120,
         )
         # 日志输出在 stderr（Python logging 默认行为）
         output = r2.stdout + r2.stderr
-        check("第二次导入无新文件", "SKIP" in output or "重复" in output or "无需处理" in output, f"output: {output[:300]}")
+        check("第二次导入无新文件",
+              "SKIP" in output or "重复" in output or "无需处理" in output or "未找到可处理" in output,
+              f"output: {output[:300]}")
 
     finally:
         cleanup(test_dir)
