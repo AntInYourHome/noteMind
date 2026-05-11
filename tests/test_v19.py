@@ -49,8 +49,8 @@ def test_builder_archive_link_with_path():
     builder.add_archive_link("HarmonyOS白皮书.pdf", "安全/操作系统安全/HarmonyOS")
 
     output = builder.build()
-    check("归档链接包含分类路径",
-          "[[安全/操作系统安全/HarmonyOS/HarmonyOS白皮书.pdf|HarmonyOS白皮书.pdf]]" in output,
+    check("归档链接指向 _archive 且包含分类路径",
+          "[[_archive/安全/操作系统安全/HarmonyOS/HarmonyOS白皮书.pdf|HarmonyOS白皮书.pdf]]" in output,
           f"实际输出片段: {[l for l in output.split(chr(10)) if '归档' in l]}")
 
 
@@ -92,8 +92,8 @@ def test_builder_section_note_backlink():
 
 
 def test_dual_archive_paths():
-    """测试原始文件同时归档到分类目录和 _archive/{category}/。"""
-    print("\n[V19-04] import.py — 双路径归档")
+    """测试原始文件只归档到 _archive/{category}/，不在分类目录。"""
+    print("\n[V19-04] import.py — 文件只归档到 _archive/{category}/")
     test_dir, source, vault = setup_test_env()
     try:
         import importlib
@@ -102,28 +102,23 @@ def test_dual_archive_paths():
         # 创建测试文件
         test_file = os.path.join(source, "test_doc.txt")
         with open(test_file, "w") as f:
-            f.write("双路径归档测试内容" * 100)
+            f.write("归档到 _archive 测试内容" * 100)
 
         category = "安全/操作系统安全/HarmonyOS"
 
         # 调用 archive_source
         import_module.archive_source(test_file, vault, category, "_archive", remove_source=True)
 
-        # 检查分类目录
+        # 检查分类目录不应有原始文件
         category_path = os.path.join(vault, category, "test_doc.txt")
-        check("分类目录存在文件", os.path.exists(category_path))
+        check("分类目录不存在原始文件", not os.path.exists(category_path))
 
         # 检查 _archive 目录
         archive_path = os.path.join(vault, "_archive", category, "test_doc.txt")
-        check("_archive 存在备份", os.path.exists(archive_path))
+        check("_archive 存在文件", os.path.exists(archive_path))
 
         # 源文件已删除
         check("源文件已删除", not os.path.exists(test_file))
-
-        # 内容一致
-        if os.path.exists(category_path) and os.path.exists(archive_path):
-            with open(category_path, "r") as f1, open(archive_path, "r") as f2:
-                check("两份文件内容一致", f1.read() == f2.read())
 
     finally:
         cleanup(test_dir)
