@@ -176,9 +176,11 @@ OpenHarmony 采用组件化设计，支持软总线、分布式数据管理、�
             check("笔记包含标签", "## 标签" in content)
             check("笔记包含归档链接", "## 原始文件" in content and "[[" in content)
 
-        # 检查归档
-        archive_files = os.listdir(os.path.join(vault, "_archive"))
-        check("原始文件已归档", len(archive_files) > 0)
+        # 检查归档（文件在 _archive/{category}/ 下）
+        archive_files = []
+        for root_dir, dirs, files in os.walk(os.path.join(vault, "_archive")):
+            archive_files.extend(files)
+        check("原始文件已归档到 _archive", len(archive_files) > 0)
 
         # 检查去重索引
         index_path = os.path.join(vault, ".notemind_index.json")

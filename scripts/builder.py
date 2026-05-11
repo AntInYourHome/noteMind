@@ -103,7 +103,7 @@ class MarkdownBuilder:
         return self
 
     def add_archive_link(self, archive_filename: str, category: str) -> "MarkdownBuilder":
-        """添加归档文件的双链（Obsidian wikilink）。
+        """添加归档文件的双链（Obsidian wikilink），指向 _archive 中的文件。
 
         Args:
             archive_filename: 归档文件名（如 "HarmonyOS+6.0安全技术白皮书.pdf"）
@@ -111,8 +111,8 @@ class MarkdownBuilder:
         """
         if not archive_filename:
             return self
-        # 带分类路径的 wikilink
-        archive_link = f"{category}/{archive_filename}"
+        # 指向 _archive/{category}/文件名
+        archive_link = f"_archive/{category}/{archive_filename}"
         self.parts.append(f"## 原始文件\n")
         self.parts.append(f"- 归档：[[{archive_link}|{archive_filename}]]\n\n")
         return self

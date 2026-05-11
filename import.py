@@ -117,7 +117,7 @@ def _update_frontmatter_tags(file_path: str, tags: list[str]):
 
 
 def archive_source(file_path: str, vault_path: str, category: str, archive_dir: str = "_archive", remove_source: bool = True) -> str:
-    """将原始文件按分类归档到对应目录（与 MD 笔记同目录），并备份到 _archive。
+    """将原始文件归档到 _archive/{category}/ 目录。
 
     Args:
         file_path: 源文件路径
@@ -126,16 +126,9 @@ def archive_source(file_path: str, vault_path: str, category: str, archive_dir: 
         archive_dir: 原始文件备份目录（默认 "_archive"）
         remove_source: 归档成功后是否从源目录删除（默认 True）
     """
-    # 1. 复制到分类目录（与 MD 笔记同目录，支持双链引用）
-    archive_path = os.path.join(vault_path, category, os.path.basename(file_path))
+    archive_path = os.path.join(vault_path, archive_dir, category, os.path.basename(file_path))
     os.makedirs(os.path.dirname(archive_path), exist_ok=True)
     shutil.copy2(file_path, archive_path)
-
-    # 2. 额外备份到 _archive 目录（按分类子目录组织）
-    backup_path = os.path.join(vault_path, archive_dir, category, os.path.basename(file_path))
-    os.makedirs(os.path.dirname(backup_path), exist_ok=True)
-    shutil.copy2(file_path, backup_path)
-
     if remove_source:
         os.remove(file_path)  # 成功后删除源文件
     return archive_path
@@ -234,25 +227,22 @@ def _handle_image_file(file_path, cfg, vault_path, fname, safe_name) -> dict:
         tags = []
     all_tags = (tags or []) + doc_type_tags
 
-    # 4. 归档图片到分类目录，并备份到 _archive
-    dest_dir = os.path.join(vault_path, category)
-    os.makedirs(dest_dir, exist_ok=True)
-    dest_img = os.path.join(dest_dir, fname)
-    shutil.copy2(file_path, dest_img)
-
-    # 备份到 _archive
+    # 4. 归档图片到 _archive 目录
     archive_dir = cfg["import"].get("archive_dir", "_archive")
     backup_path = os.path.join(vault_path, archive_dir, category, fname)
     os.makedirs(os.path.dirname(backup_path), exist_ok=True)
     shutil.copy2(file_path, backup_path)
 
-    # 5. 创建 MD 文档，引用同目录下的图片
+    # 5. 创建 MD 文档（在分类目录下）
+    dest_dir = os.path.join(vault_path, category)
+    os.makedirs(dest_dir, exist_ok=True)
     date_str = datetime.now().strftime("%Y-%m-%d")
     builder = MarkdownBuilder(fname, date_str)
     builder.add_frontmatter(category, all_tags, source_path=file_path).add_title()
     builder.add_file_summary(desc)
-    # 引用同目录下的图片
-    builder.add_images([fname], [desc])
+    # 引用 _archive 目录下的图片
+    archive_img_path = f"{archive_dir}/{category}/{fname}"
+    builder.add_images([archive_img_path], [desc])
     builder.add_tags_section(all_tags).add_footer()
 
     md_name = f"{date_str}-{safe_name}.md"
