@@ -264,27 +264,52 @@ class APIProviderPool:
         self._total_429_count = 0  # 全局 429 计数
 
     def next_provider(self, multimodal: bool = False) -> tuple[dict, ProviderHealthTracker]:
-        """轮询获取下一个可用的 provider。
+        """加权随机选择下一个可用的 provider，出错少的优先。
 
         降级策略：
         - 跳过降级/冷却中的 provider
         - multimodal=True 时仅选择支持多模态的 provider
+        - 使用加权随机选择：health_score 高的 provider 被选中的概率更大
         - 全部不可用时强制返回
         """
         with self._lock:
             n = len(self.providers)
-            for _ in range(n):
+            available = []
+            for i in range(n):
+                tracker = self._trackers[i]
+                if tracker.is_available():
+                    if multimodal and not self.providers[i].get("multimodal", False):
+                        continue
+                    available.append((i, tracker))
+
+            if not available:
+                # 全部不可用，强制返回
                 idx = self._index % n
                 self._index += 1
-                tracker = self._trackers[idx]
-                if tracker.is_available():
-                    if multimodal and not self.providers[idx].get("multimodal", False):
-                        continue
-                    return self.providers[idx].copy(), tracker
-            # 全部不可用
-            idx = self._index % n
-            self._index += 1
-            return self.providers[idx].copy(), self._trackers[idx]
+                return self.providers[idx].copy(), self._trackers[idx]
+
+            if len(available) == 1:
+                idx, tracker = available[0]
+                return self.providers[idx].copy(), tracker
+
+            # 加权随机选择：health_score 越高，选中概率越大
+            weights = []
+            indices = []
+            for idx, tracker in available:
+                score = max(0.01, tracker.health_score())  # 避免 0 权重
+                weights.append(score)
+                indices.append((idx, tracker))
+
+            # 归一化权重
+            total_weight = sum(weights)
+            weights = [w / total_weight for w in weights]
+
+            # 加权随机选择
+            chosen_idx = random.choices(range(len(indices)), weights=weights, k=1)[0]
+            idx, tracker = indices[chosen_idx]
+            self._index = (idx + 1) % n  # 更新轮询索引
+
+            return self.providers[idx].copy(), tracker
 
     def _on_error(self, tracker: ProviderHealthTracker, error_str: str, error_type: str):
         """处理 429 限流或 5xx 服务器错误，触发降级链路。
@@ -330,30 +355,59 @@ class APIProviderPool:
                     f"[降级] 并发度已从 {self._original_concurrency} → {new_concurrency}"
                 )
 
-    def call(self, messages: list, max_tokens: int = 500, retries: int = 3,
+    def call(self, messages: list, max_tokens: int = 500, retries: int = None,
              multimodal: bool = False) -> dict:
-        """调用 API，自动选择可用的 provider。
+        """调用 API，自动选择可用的 provider，每次重试切换 provider。
+
+        重试逻辑在此层处理，每次重试调用 next_provider() 切换到不同的 provider，
+        出错少的 provider 被选中的概率更高（加权随机）。
 
         Returns:
             {"content": str, "input_tokens": int, "output_tokens": int, "latency": float}
         """
-        provider, tracker = self.next_provider(multimodal=multimodal)
-        try:
-            result = _call_with_provider(provider, messages, max_tokens, retries)
-            tracker.record_success()
-            # 向后兼容：如果 _call_with_provider 返回 dict，则返回完整结果
-            if isinstance(result, dict):
-                return result
-            return {"content": result, "input_tokens": 0, "output_tokens": 0, "latency": 0}
-        except Exception as e:
-            error_str = str(e)
-            if "429" in error_str:
-                self._on_error(tracker, error_str, error_type="429")
-            elif any(code in error_str for code in ("500", "502", "503", "504")):
-                self._on_error(tracker, error_str, error_type="5xx")
-            else:
-                tracker.record_failure(error_str, is_rate_limit=False)
-            raise
+        if retries is None:
+            retries = _MAX_RETRIES
+
+        last_error = None
+        tried_providers = set()
+
+        for attempt in range(1, retries + 1):
+            provider, tracker = self.next_provider(multimodal=multimodal)
+
+            # 避免重复尝试同一个 provider（当 provider < retries 时）
+            tracker_id = id(tracker)
+            if tracker_id in tried_providers and len(tried_providers) >= len(self.providers):
+                # 所有 provider 都试过了，等待后重试
+                if attempt < retries:
+                    delay = _BASE_DELAY * (2 ** (attempt - 1)) + random.uniform(0, 1)
+                    time.sleep(delay)
+                    tried_providers.clear()  # 重置，允许第二轮尝试
+                    continue
+
+            try:
+                result = _call_with_provider(provider, messages, max_tokens, retries=1)
+                tracker.record_success()
+                if isinstance(result, dict):
+                    return result
+                return {"content": result, "input_tokens": 0, "output_tokens": 0, "latency": 0}
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+                tried_providers.add(tracker_id)
+
+                if "429" in error_str:
+                    self._on_error(tracker, error_str, error_type="429")
+                elif any(code in error_str for code in ("500", "502", "503", "504")):
+                    self._on_error(tracker, error_str, error_type="5xx")
+                else:
+                    tracker.record_failure(error_str, is_rate_limit=False)
+
+                # 重试延迟
+                if attempt < retries:
+                    delay = _BASE_DELAY * (2 ** (attempt - 1)) + random.uniform(0, 1)
+                    time.sleep(delay)
+
+        raise last_error or RuntimeError("API 调用失败，已达最大重试次数")
 
     def call_text(self, messages: list, max_tokens: int = 500, retries: int = 3,
                   multimodal: bool = False) -> str:
@@ -496,6 +550,7 @@ _BASE_DELAY = 1.0
 
 
 def _call_with_provider(provider: dict, messages: list, max_tokens: int = 500, retries: int = None) -> dict:
+    """使用指定的 provider 发起一次 API 调用（重试由 pool.call 层处理）。"""
     # --- 测试模式：10% 随机注入错误 ---
     if _TEST_CHAOS and random.random() < 0.1:
         err = random.choice(_CHAOS_ERROR_TYPES)
@@ -523,81 +578,73 @@ def _call_with_provider(provider: dict, messages: list, max_tokens: int = 500, r
         method="POST",
     )
 
-    max_retries = retries if retries is not None else _MAX_RETRIES
-    last_error = None
+    try:
+        start = time.time()
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            latency = time.time() - start
+            data = json.loads(resp.read().decode("utf-8"))
+            usage = data.get("usage", {})
+            choices = data.get("choices")
+            if not choices:
+                raise RuntimeError(f"API 返回空 choices: {data}")
+            message = choices[0].get("message")
+            if not message:
+                raise RuntimeError(f"API 返回空 message: {data}")
+            content = message.get("content", "")
+            # content 为空时 fallback 到 reasoning_content，但过滤思考过程标记
+            if not content:
+                reasoning = message.get("reasoning_content") or message.get("reasoning", "")
+                if reasoning:
+                    content = _extract_reasoning(reasoning)
+            content = content.strip() if content else "[空响应]"
+            return {
+                "content": content,
+                "input_tokens": usage.get("prompt_tokens", 0),
+                "output_tokens": usage.get("completion_tokens", 0),
+                "latency": latency,
+            }
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
 
-    for attempt in range(1, max_retries + 1):
-        try:
-            start = time.time()
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                latency = time.time() - start
-                data = json.loads(resp.read().decode("utf-8"))
-                usage = data.get("usage", {})
-                choices = data.get("choices")
-                if not choices:
-                    raise RuntimeError(f"API 返回空 choices: {data}")
-                message = choices[0].get("message")
-                if not message:
-                    raise RuntimeError(f"API 返回空 message: {data}")
-                content = message.get("content", "")
-                # content 为空时 fallback 到 reasoning_content，但过滤思考过程标记
-                if not content:
-                    reasoning = message.get("reasoning_content") or message.get("reasoning", "")
-                    if reasoning:
-                        content = _extract_reasoning(reasoning)
-                content = content.strip() if content else "[空响应]"
-                return {
-                    "content": content,
-                    "input_tokens": usage.get("prompt_tokens", 0),
-                    "output_tokens": usage.get("completion_tokens", 0),
-                    "latency": latency,
-                }
-        except urllib.error.HTTPError as e:
-            body = e.read().decode("utf-8", errors="replace")
+        # 307 临时重定向：跟随一次
+        if e.code == 307:
+            redirect_url = e.headers.get("Location")
+            if redirect_url:
+                req = urllib.request.Request(
+                    redirect_url,
+                    data=req.data,
+                    headers=dict(req.headers),
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    latency = time.time() - start
+                    data = json.loads(resp.read().decode("utf-8"))
+                    usage = data.get("usage", {})
+                    choices = data.get("choices")
+                    if not choices:
+                        raise RuntimeError(f"API 返回空 choices: {data}")
+                    message = choices[0].get("message")
+                    if not message:
+                        raise RuntimeError(f"API 返回空 message: {data}")
+                    content = message.get("content", "")
+                    if not content:
+                        reasoning = message.get("reasoning_content") or message.get("reasoning", "")
+                        if reasoning:
+                            content = _extract_reasoning(reasoning)
+                    content = content.strip() if content else "[空响应]"
+                    return {
+                        "content": content,
+                        "input_tokens": usage.get("prompt_tokens", 0),
+                        "output_tokens": usage.get("completion_tokens", 0),
+                        "latency": time.time() - start,
+                    }
+            raise RuntimeError(f"AI API 307 重定向但无 Location 头")
 
-            # 307 临时重定向：立即跟随，不计入重试次数
-            if e.code == 307:
-                redirect_url = e.headers.get("Location")
-                if redirect_url:
-                    # 重新构建 Request 对象指向新 URL
-                    req = urllib.request.Request(
-                        redirect_url,
-                        data=req.data,
-                        headers=dict(req.headers),
-                        method="POST",
-                    )
-                    delay = _BASE_DELAY + random.uniform(0, 0.5)
-                    logger.warning(f"API 307 重定向到: {redirect_url}, {delay:.1f}s 后重试...")
-                    time.sleep(delay)
-                    continue
-                last_error = RuntimeError(f"AI API 307 重定向但无 Location 头")
-            else:
-                last_error = RuntimeError(f"AI API 错误 ({e.code}): {body}")
-
-            if attempt < max_retries:
-                delay = _BASE_DELAY * (2 ** (attempt - 1)) + random.uniform(0, 1)
-                logger.warning(f"API 调用失败 (第 {attempt}/{max_retries} 次, 状态码: {e.code}), {delay:.1f}s 后重试...")
-                time.sleep(delay)
-            else:
-                raise last_error
-        except urllib.error.URLError as e:
-            last_error = RuntimeError(f"AI API 网络错误: {e.reason}")
-            if attempt < max_retries:
-                delay = _BASE_DELAY * (2 ** (attempt - 1)) + random.uniform(0, 1)
-                logger.warning(f"API 网络异常 (第 {attempt}/{max_retries} 次), {delay:.1f}s 后重试...")
-                time.sleep(delay)
-            else:
-                raise last_error
-        except TimeoutError as e:
-            last_error = RuntimeError(f"AI API 超时: {e}")
-            if attempt < max_retries:
-                delay = _BASE_DELAY * (2 ** (attempt - 1)) + random.uniform(0, 1)
-                logger.warning(f"API 超时 (第 {attempt}/{max_retries} 次), {delay:.1f}s 后重试...")
-                time.sleep(delay)
-            else:
-                raise last_error
-
-    raise last_error or RuntimeError("API 调用失败，已达最大重试次数")
+        raise RuntimeError(f"AI API 错误 ({e.code}): {body}")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"AI API 网络错误: {e.reason}")
+    except TimeoutError as e:
+        raise RuntimeError(f"AI API 超时: {e}")
 
 
 # --- 向后兼容的单调用接口 ---
