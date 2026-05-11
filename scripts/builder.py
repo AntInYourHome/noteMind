@@ -111,10 +111,10 @@ class MarkdownBuilder:
         """
         if not archive_filename:
             return self
-        # 计算从分类目录到 _archive 的相对路径
-        archive_link = archive_filename
+        # 带分类路径的 wikilink
+        archive_link = f"{category}/{archive_filename}"
         self.parts.append(f"## 原始文件\n")
-        self.parts.append(f"- 归档：[[{archive_link}]]\n\n")
+        self.parts.append(f"- 归档：[[{archive_link}|{archive_filename}]]\n\n")
         return self
 
     def add_tags_section(self, tags: list[str]) -> "MarkdownBuilder":
@@ -163,10 +163,15 @@ class MarkdownBuilder:
         if hasattr(self, '_summary') and self._summary:
             parts.append("## 文件摘要\n")
             parts.append(f"{self._summary}\n\n")
-        # 章节目录（双向链接）
+        # 章节目录（双向链接，带完整路径）
         parts.append("## 目录\n")
         for link_name, section_title in section_links:
-            parts.append(f"- [[{link_name}]] {section_title}\n")
+            # link_name is "分类路径/文件名" format from caller
+            if "/" in link_name:
+                display = link_name.split("/")[-1]
+            else:
+                display = link_name
+            parts.append(f"- [[{link_name}|{display}]] {section_title}\n")
         # 页脚
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         parts.append(f"\n---\n> 由 NoteMind 自动生成于 {now}\n")
@@ -212,8 +217,12 @@ class MarkdownBuilder:
             parts.append("## 图片\n")
             for desc in image_descriptions[image_index:]:
                 parts.append(f"> {desc}\n\n")
-        # 返回链接
-        parts.append(f"\n> 返回 [[{parent_name}]]")
+        # 返回链接（带完整路径）
+        if "/" in parent_name:
+            parent_display = parent_name.split("/")[-1]
+        else:
+            parent_display = parent_name
+        parts.append(f"\n> 返回 [[{parent_name}|{parent_display}]]")
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         parts.append(f"\n> 由 NoteMind 自动生成于 {now}\n")
         return "\n".join(parts)
