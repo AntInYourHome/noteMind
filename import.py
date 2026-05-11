@@ -553,7 +553,7 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3) -> None:
                         break
             except Exception:
                 pass
-            lines.append(f"- [[{note_stem}]] {note_rel} {note_tags}\n")
+            lines.append(f"- [[{note_rel}|{note_stem}]] {note_tags}\n")
             total_notes += 1
 
     lines.append(f"\n---\n**总计：{total_notes} 篇笔记**\n")
