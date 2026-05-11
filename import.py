@@ -116,18 +116,26 @@ def _update_frontmatter_tags(file_path: str, tags: list[str]):
         logger.warning(f"  更新标签失败 {file_path}: {e}")
 
 
-def archive_source(file_path: str, vault_path: str, category: str, remove_source: bool = True) -> str:
-    """将原始文件按分类归档到对应目录（与 MD 笔记同目录）。
+def archive_source(file_path: str, vault_path: str, category: str, archive_dir: str = "_archive", remove_source: bool = True) -> str:
+    """将原始文件按分类归档到对应目录（与 MD 笔记同目录），并备份到 _archive。
 
     Args:
         file_path: 源文件路径
         vault_path: Vault 根目录
         category: 分类路径（如 "安全/操作系统安全/HarmonyOS"）
+        archive_dir: 原始文件备份目录（默认 "_archive"）
         remove_source: 归档成功后是否从源目录删除（默认 True）
     """
+    # 1. 复制到分类目录（与 MD 笔记同目录，支持双链引用）
     archive_path = os.path.join(vault_path, category, os.path.basename(file_path))
     os.makedirs(os.path.dirname(archive_path), exist_ok=True)
-    shutil.copy2(file_path, archive_path)  # 先复制
+    shutil.copy2(file_path, archive_path)
+
+    # 2. 额外备份到 _archive 目录（按分类子目录组织）
+    backup_path = os.path.join(vault_path, archive_dir, category, os.path.basename(file_path))
+    os.makedirs(os.path.dirname(backup_path), exist_ok=True)
+    shutil.copy2(file_path, backup_path)
+
     if remove_source:
         os.remove(file_path)  # 成功后删除源文件
     return archive_path
@@ -226,11 +234,17 @@ def _handle_image_file(file_path, cfg, vault_path, fname, safe_name) -> dict:
         tags = []
     all_tags = (tags or []) + doc_type_tags
 
-    # 4. 归档图片到分类目录（而非 _archive/）
+    # 4. 归档图片到分类目录，并备份到 _archive
     dest_dir = os.path.join(vault_path, category)
     os.makedirs(dest_dir, exist_ok=True)
     dest_img = os.path.join(dest_dir, fname)
     shutil.copy2(file_path, dest_img)
+
+    # 备份到 _archive
+    archive_dir = cfg["import"].get("archive_dir", "_archive")
+    backup_path = os.path.join(vault_path, archive_dir, category, fname)
+    os.makedirs(os.path.dirname(backup_path), exist_ok=True)
+    shutil.copy2(file_path, backup_path)
 
     # 5. 创建 MD 文档，引用同目录下的图片
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -456,8 +470,9 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, fname, safe_
         md5 = compute_md5(file_path)
         add_to_index(file_path, md5, category, dest_path, vault_path, dedup_index)
 
-    # 归档原始文件到分类目录（成功后删除源文件）
-    archive_source(file_path, vault_path, category, remove_source=True)
+    # 归档原始文件到分类目录，并备份到 _archive（成功后删除源文件）
+    archive_dir = cfg["import"].get("archive_dir", "_archive")
+    archive_source(file_path, vault_path, category, archive_dir, remove_source=True)
 
     cleanup_paths.clear()
 
@@ -538,7 +553,7 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3) -> None:
                         break
             except Exception:
                 pass
-            lines.append(f"- [[{note_rel}|{note_stem}]] {note_tags}\n")
+            lines.append(f"- [[{note_stem}]] {note_rel} {note_tags}\n")
             total_notes += 1
 
     lines.append(f"\n---\n**总计：{total_notes} 篇笔记**\n")

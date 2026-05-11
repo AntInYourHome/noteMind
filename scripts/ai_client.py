@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import random
+import re
 import time
 import urllib.request
 import urllib.error
@@ -30,6 +31,33 @@ _CHAOS_ERROR_TYPES = [
 ]
 
 logger = logging.getLogger("notemind")
+
+
+def _extract_reasoning(raw: str) -> str:
+    """从 reasoning 模型的思考过程中提取最终结论。
+
+    reasoning 模型的输出通常包含思考过程标记，此函数过滤这些标记，
+    只提取最终的业务结论。
+    """
+    if not raw:
+        return raw
+
+    # 匹配 <|end_of_thought|> 之后的内容（常见于 qwen3-reasoning 等）
+    pattern = re.search(r'<\|end_of_thought\|>', raw)
+    if pattern:
+        after = raw[pattern.end():].strip()
+        if after:
+            return after
+
+    # 匹配 </think> 之后的内容（常见于 DeepSeek R1 等）
+    pattern2 = re.search(r'</think>', raw)
+    if pattern2:
+        after = raw[pattern2.end():].strip()
+        if after:
+            return after
+
+    # 没有检测到思考过程标记，原样返回
+    return raw
 
 
 # --- Provider 池 ---
@@ -97,11 +125,11 @@ def _call_with_model(model_config: dict, messages: list, max_tokens: int = 500, 
                 if not message:
                     raise RuntimeError(f"API 返回空 message: {data}")
                 content = message.get("content", "")
-                # reasoning 模型兼容：content 为 null 时，检查 reasoning 字段
+                # content 为空时 fallback 到 reasoning_content，但过滤思考过程标记
                 if not content:
                     reasoning = message.get("reasoning_content") or message.get("reasoning", "")
                     if reasoning:
-                        content = reasoning
+                        content = _extract_reasoning(reasoning)
                 return {
                     "content": content.strip() if content else "[空响应]",
                     "input_tokens": usage.get("prompt_tokens", 0),
@@ -512,11 +540,11 @@ def _call_with_provider(provider: dict, messages: list, max_tokens: int = 500, r
                 if not message:
                     raise RuntimeError(f"API 返回空 message: {data}")
                 content = message.get("content", "")
-                # reasoning 模型兼容：content 为 null 时，检查 reasoning 字段
+                # content 为空时 fallback 到 reasoning_content，但过滤思考过程标记
                 if not content:
                     reasoning = message.get("reasoning_content") or message.get("reasoning", "")
                     if reasoning:
-                        content = reasoning
+                        content = _extract_reasoning(reasoning)
                 content = content.strip() if content else "[空响应]"
                 return {
                     "content": content,
