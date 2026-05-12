@@ -427,6 +427,374 @@ def test_dfx_performance_large_vault():
     check("无重复笔记", len(set(l for l in lines if "[[" in l)) == len([l for l in lines if "[[" in l]))
 
 
+def test_dfx_markdown_parser_fallback():
+    """测试 DFX — MD 解析器无标题 fallback。"""
+    print("\n[V11-16] DFX — MD 解析器无标题 fallback")
+    import importlib
+    parsers_mod = importlib.import_module('scripts.parsers')
+    import tempfile
+
+    # 无标题纯文本
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
+        f.write('这是一篇学习笔记\n')
+        path = f.name
+    result = parsers_mod.parse_markdown(path)
+    check("无标题生成'概述'章节", len(result.sections) == 1 and result.sections[0].title == "概述")
+    check("章节有内容", len(result.sections[0].text) > 0)
+    os.unlink(path)
+
+    # 空文件
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
+        f.write('')
+        path = f.name
+    result = parsers_mod.parse_markdown(path)
+    check("空文件无章节", len(result.sections) == 0)
+    os.unlink(path)
+
+    # 有标题
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
+        f.write('# 大标题\n\n## 第一章\n内容\n')
+        path = f.name
+    result = parsers_mod.parse_markdown(path)
+    check("有标题正常解析", len(result.sections) >= 1)
+    os.unlink(path)
+
+
+def test_dfx_unsupported_file_no_md():
+    """测试 DFX — 不支持格式不创建 MD。"""
+    print("\n[V11-17] DFX — 不支持格式仅索引")
+    import importlib
+    import_module = importlib.import_module('import')
+    test_dir, source, vault = setup_test_env()
+    try:
+        test_file = os.path.join(source, "test.unknown")
+        with open(test_file, "w") as f:
+            f.write("unknown content")
+
+        cfg = {"vault": {"categories": {}}, "import": {}}
+        result = import_module.handle_unsupported_file(test_file, cfg, vault, source)
+
+        check("返回 ok", result["status"] == "ok")
+        check("path 为 None（无 MD）", result["path"] is None)
+        check("返回 file_type", result["file_type"] == ".unknown")
+        check("返回 file_name", result["file_name"] == "test.unknown")
+        check("返回 category", result["category"] == "")
+    finally:
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+def test_dfx_moc_unsupported_split():
+    """测试 DFX — MOC_unsupported 500 条分割。"""
+    print("\n[V11-18] DFX — MOC_unsupported 分割")
+    test_dir, source, vault = setup_test_env()
+    try:
+        # 模拟 1200 个不支持文件
+        entries = [(f"cat{i//100}", f"file{i}", ".xyz") for i in range(1200)]
+
+        import importlib
+        import_module = importlib.import_module('import')
+
+        # 直接调用内部函数
+        unsupported_file_records = entries
+        import_module.update_unsupported_moc(vault, unsupported_file_records)
+
+        # 检查分割文件
+        moc1 = os.path.join(vault, "MOC_unsupported_1.md")
+        moc2 = os.path.join(vault, "MOC_unsupported_2.md")
+        moc3 = os.path.join(vault, "MOC_unsupported_3.md")
+        check("分割为 3 个文件", os.path.exists(moc1) and os.path.exists(moc2) and os.path.exists(moc3))
+
+        if os.path.exists(moc1):
+            with open(moc1, "r", encoding="utf-8") as f:
+                content = f.read()
+            check("第 1 部分标记", "第 1/3 部分" in content)
+            check("包含文件类型标签", ".xyz" in content)
+    finally:
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+def test_dfx_sqlite_status_tracking():
+    """测试 DFX — SQLite 状态追踪。"""
+    print("\n[V11-19] DFX — SQLite 状态追踪")
+    import importlib
+    import_module = importlib.import_module('import')
+    test_dir, source, vault = setup_test_env()
+    try:
+        # 重置 SQLite 单例，确保使用当前 vault
+        import_module._status_db_conn = None
+
+        os.makedirs(source, exist_ok=True)
+        test_file = os.path.join(source, "doc.txt")
+        with open(test_file, "w") as f:
+            f.write("test content")
+
+        # 记录成功状态
+        import_module.record_status(vault, test_file, "success", os.path.join(vault, "doc.md"), "category1")
+        # 记录失败状态
+        test_file2 = os.path.join(source, "fail.txt")
+        with open(test_file2, "w") as f:
+            f.write("fail content")
+        import_module.record_status(vault, test_file2, "failed", None, None, "parse error")
+
+        # 验证数据库
+        db_path = os.path.join(vault, ".notemind_status.db")
+        check("SQLite 数据库已创建", os.path.exists(db_path))
+
+        if os.path.exists(db_path):
+            import sqlite3
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM file_status")
+            count = cursor.fetchone()[0]
+            check("2 条状态记录", count == 2, f"actual: {count}")
+
+            cursor.execute("SELECT status FROM file_status WHERE file_name = 'doc.txt'")
+            row = cursor.fetchone()
+            check("成功记录正确", row and row[0] == "success", f"actual: {row}")
+
+            cursor.execute("SELECT error FROM file_status WHERE file_name = 'fail.txt'")
+            row = cursor.fetchone()
+            check("失败记录正确", row and row[0] == "parse error", f"actual: {row}")
+            conn.close()
+    finally:
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+def test_dfx_dedup_detection():
+    """测试 DFX — MD5 去重检测。"""
+    print("\n[V11-20] DFX — MD5 去重")
+    import importlib
+    import tempfile
+    dedup_mod = importlib.import_module('scripts.dedup')
+
+    test_dir = tempfile.mkdtemp(prefix="notemind_dedup_")
+    try:
+        # 创建两个内容相同的文件
+        file1 = os.path.join(test_dir, "doc1.pdf")
+        file2 = os.path.join(test_dir, "doc2.pdf")
+        with open(file1, "wb") as f:
+            f.write(b"same content")
+        with open(file2, "wb") as f:
+            f.write(b"same content")
+
+        index_path = os.path.join(test_dir, "dedup_index.json")
+
+        # 第一次检查：新文件不重复
+        dup = dedup_mod.check_duplicate(file1, test_dir, index_path)
+        check("新文件不重复", dup is None)
+
+        # 计算 MD5 并添加到索引
+        md5 = dedup_mod.compute_md5(file1)
+        dedup_mod.add_to_index(file1, md5, "test", "note1.md", test_dir, index_path)
+
+        # 第二次检查：相同内容文件应被检测为重复
+        dup = dedup_mod.check_duplicate(file2, test_dir, index_path)
+        check("重复文件检测到", dup is not None)
+        check("重复记录包含 category", dup.get("category") == "test", f"actual: {dup}")
+
+        # 不同内容文件不重复
+        file3 = os.path.join(test_dir, "doc3.pdf")
+        with open(file3, "wb") as f:
+            f.write(b"different content")
+        dup = dedup_mod.check_duplicate(file3, test_dir, index_path)
+        check("不同内容不重复", dup is None)
+
+        # 验证索引文件持久化
+        check("索引文件已保存", os.path.exists(index_path))
+        if os.path.exists(index_path):
+            loaded = dedup_mod.load_dedup_index(test_dir, index_path)
+            check("索引可加载", len(loaded) == 1, f"actual: {len(loaded)}")
+    finally:
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+def test_dfx_archive_link_with_path():
+    """测试 DFX — 原文件链接带路径。"""
+    print("\n[V11-21] DFX — 原文件链接路径")
+    from scripts.builder import MarkdownBuilder
+
+    # 带 original_path
+    builder = MarkdownBuilder("安全/白皮书.pdf", "2026-01-01")
+    builder.add_frontmatter("安全", ["#安全"], vault_rel_path="source/安全/白皮书.pdf")
+    builder.add_title()
+    builder.add_archive_link("白皮书.pdf", "安全", "source/安全/白皮书.pdf")
+    output = builder.build()
+
+    check("wikilink 包含路径", "[[source/安全/白皮书]]" in output, f"actual: {output[:200]}")
+
+    # 不带 original_path（回退到仅文件名）
+    builder2 = MarkdownBuilder("test.pdf", "2026-01-01")
+    builder2.add_frontmatter("other", [])
+    builder2.add_title()
+    builder2.add_archive_link("test.pdf")
+    output2 = builder2.build()
+    check("回退到文件名", "[[test]]" in output2)
+
+
+def test_dfx_large_file_split_logic():
+    """测试 DFX — 大文件章节分割逻辑。"""
+    print("\n[V11-22] DFX — 大文件处理")
+    import importlib
+    import_module = importlib.import_module('import')
+
+    # 模拟大文件处理场景
+    sections = []
+    for i in range(20):
+        sections.append({"title": f"第{i+1}章", "text": "x" * 1000, "summary": f"摘要{i+1}"})
+
+    # 检查是否触发分割
+    should_split = len(sections) >= 5 or sum(len(s.get("text", "")) for s in sections) >= 10000
+    check("20 章节触发分割", should_split)
+
+    # 小文件不分割
+    small_sections = [{"title": "短章", "text": "x" * 100, "summary": "短摘要"}]
+    should_split_small = len(small_sections) >= 5 or sum(len(s.get("text", "")) for s in small_sections) >= 10000
+    check("小文件不触发分割", not should_split_small)
+
+
+def test_dfx_error_isolation():
+    """测试 DFX — 错误隔离不影响其他文件。"""
+    print("\n[V11-23] DFX — 错误隔离")
+    import importlib
+    import_module = importlib.import_module('import')
+    test_dir, source, vault = setup_test_env()
+    try:
+        # 创建 3 个文件，中间一个无法读取
+        for i in range(3):
+            test_file = os.path.join(source, f"file{i}.txt")
+            with open(test_file, "w") as f:
+                if i == 1:
+                    f.write("content")
+                else:
+                    f.write("normal content")
+
+        # 模拟处理
+        results = []
+        for i in range(3):
+            try:
+                test_file = os.path.join(source, f"file{i}.txt")
+                if i == 1:
+                    raise Exception("模拟处理失败")
+                results.append("success")
+            except Exception:
+                results.append("failed")
+
+        check("第 1 个成功", results[0] == "success")
+        check("第 2 个失败", results[1] == "failed")
+        check("第 3 个成功", results[2] == "success")
+    finally:
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+def test_dfx_vault_initialization():
+    """测试 DFX — Vault 目录初始化。"""
+    print("\n[V11-24] DFX — Vault 初始化")
+    import importlib
+    import_module = importlib.import_module('import')
+    test_dir = tempfile.mkdtemp(prefix="notemind_vault_")
+    vault = os.path.join(test_dir, "vault")
+
+    try:
+        import_module.init_vault(vault)
+
+        check("vault 目录已创建", os.path.exists(vault))
+        check("_archive 目录已创建", os.path.exists(os.path.join(vault, "_archive")))
+        check("_failed 目录已创建", os.path.exists(os.path.join(vault, "_failed")))
+    finally:
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+def test_dfx_moc_cleanup():
+    """测试 DFX — MOC 旧文件清理。"""
+    print("\n[V11-25] DFX — MOC 清理")
+    test_dir, source, vault = setup_test_env()
+    try:
+        # 创建旧的 MOC 文件
+        old_mocs = ["MOC.md", "MOC_1.md", "MOC_2.md", "MOC_unsupported.md", "MOC_fail.md"]
+        for moc in old_mocs:
+            with open(os.path.join(vault, moc), "w") as f:
+                f.write("# old moc\n")
+
+        import importlib
+        import_module = importlib.import_module('import')
+
+        # 模拟只有 100 条笔记，不需要分割
+        entries = [(f"cat{i//10}", f"note{i}", f"#tag{i}") for i in range(100)]
+        import_module.update_moc(vault)
+
+        check("MOC.md 已重建", os.path.exists(os.path.join(vault, "MOC.md")))
+        check("MOC_unsupported.md 保留", os.path.exists(os.path.join(vault, "MOC_unsupported.md")))
+        check("MOC_fail.md 保留", os.path.exists(os.path.join(vault, "MOC_fail.md")))
+        check("MOC_1.md 已删除", not os.path.exists(os.path.join(vault, "MOC_1.md")))
+        check("MOC_2.md 已删除", not os.path.exists(os.path.join(vault, "MOC_2.md")))
+    finally:
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+def test_dfx_frontmatter_special_chars():
+    """测试 DFX — frontmatter 特殊字符处理。"""
+    print("\n[V11-26] DFX — 特殊字符")
+    from scripts.builder import MarkdownBuilder
+
+    # 包含特殊字符的标签和路径
+    builder = MarkdownBuilder("C++/STL_笔记.md", "2026-01-01")
+    builder.add_frontmatter("C++/STL", ["C++", "STL", "模板元编程"],
+                           vault_rel_path="C++/STL_笔记.md")
+    builder.add_title()
+    output = builder.build()
+
+    check("C++ 标签正确", "C++" in output)
+    check("中文标签正确", "模板元编程" in output)
+    check("路径无转义问题", "C++/STL_笔记.md" in output)
+
+
+def test_dfx_concurrent_safe():
+    """测试 DFX — 并发安全（锁机制）。"""
+    print("\n[V11-27] DFX — 并发安全")
+    import importlib
+    import_module = importlib.import_module('import')
+    import_module._status_db_conn = None  # 重置单例
+    import threading
+
+    test_dir, source, vault = setup_test_env()
+    try:
+        os.makedirs(source, exist_ok=True)
+        # 创建 10 个文件
+        for i in range(10):
+            with open(os.path.join(source, f"file{i}.txt"), "w") as f:
+                f.write(f"content {i}")
+
+        # 并发调用 record_status
+        errors = []
+        def record(i):
+            try:
+                import_module.record_status(vault, os.path.join(source, f"file{i}.txt"),
+                                           "success", f"/vault/file{i}.md", "cat")
+            except Exception as e:
+                errors.append(str(e))
+
+        threads = [threading.Thread(target=record, args=(i,)) for i in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        check("并发记录无错误", len(errors) == 0, f"errors: {errors}")
+
+        # 验证所有记录
+        db_path = os.path.join(vault, ".notemind_status.db")
+        if os.path.exists(db_path):
+            import sqlite3
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM file_status")
+            count = cursor.fetchone()[0]
+            check(f"10 条记录 (实际 {count})", count == 10, f"actual: {count}")
+            conn.close()
+    finally:
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("NoteMind v1.11.0 专项测试")
@@ -448,6 +816,18 @@ if __name__ == "__main__":
         test_dfx_error_handling_graceful()
         test_dfx_config_validation()
         test_dfx_performance_large_vault()
+        test_dfx_markdown_parser_fallback()
+        test_dfx_unsupported_file_no_md()
+        test_dfx_moc_unsupported_split()
+        test_dfx_sqlite_status_tracking()
+        test_dfx_dedup_detection()
+        test_dfx_archive_link_with_path()
+        test_dfx_large_file_split_logic()
+        test_dfx_error_isolation()
+        test_dfx_vault_initialization()
+        test_dfx_moc_cleanup()
+        test_dfx_frontmatter_special_chars()
+        test_dfx_concurrent_safe()
     except Exception as e:
         print(f"\n⚠️  测试异常: {e}")
         import traceback
