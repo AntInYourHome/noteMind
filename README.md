@@ -1,6 +1,6 @@
 # NoteMind
 
-**v1.9.5 — 本地文件 → Obsidian Vault 智能导入工具**
+**v1.10.0 — 本地文件 → Obsidian Vault 智能导入工具**
 
 将 PDF、Word、PPT、Excel、图片等文件自动解析、AI 摘要分类，生成精简 Markdown 笔记并建立文档关联，存入 Obsidian Vault。
 
@@ -227,6 +227,13 @@ A: 可以，Vault 是纯 Markdown 文件夹，支持 iCloud、Git、Syncthing �
 A: JPG、PNG、GIF、BMP、WebP、TIFF、SVG。
 
 ## 版本历史
+
+### v1.10.0 (2026-05-12)
+
+- **分类改用 source 路径**：`category` 不再使用 AI 分类，改为镜像 `--source` 中文档所在目录路径
+- **`--update` 校验修复**：校验并修复已有 MD 文件的分类和目录映射，重建 MOC 和双链
+- **删除 `_classify_document` 函数**：动态/静态分类器不再用于分类（AI 标签提取保留）
+- **修复 `classify_input` 未定义 bug**
 
 ### v1.9.5 (2026-05-12)
 
