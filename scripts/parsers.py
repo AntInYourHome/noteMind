@@ -420,7 +420,7 @@ def parse_markdown(file_path: str) -> ParseResult:
             ocr_text = _ocr_image(img_path)
             all_image_ocr.append(ocr_text)
 
-    # 按 ## 标题拆分章节
+    # 按 ## 及以上标题拆分章节
     sections = []
     heading_pattern = r'^(#{1,6})\s+(.+)$'
     parts = re.split(heading_pattern, content, flags=re.MULTILINE)
@@ -456,6 +456,10 @@ def parse_markdown(file_path: str) -> ParseResult:
             clean = _clean_markdown("".join(current_text))
             if clean.strip():
                 sections.append(Section(current_title or "概述", clean, current_images))
+
+    # 无章节时（纯文本或无标题 MD），将全文作为"概述"章节
+    if not sections and text.strip():
+        sections.append(Section("概述", text.strip(), []))
 
     return ParseResult(text.strip(), images, sections, all_image_ocr)
 
