@@ -1350,6 +1350,7 @@ def main():
                 result = handle_unsupported_file(file_path, cfg, vault_path, source)
                 if result["status"] == "ok":
                     stats["ok"] += 1
+                    update_moc(vault_path)  # 实时更新 MOC
         logger.info(f"不支持的格式处理完成: {len(unsupported_files)} 个文件已创建链接")
 
     files = parseable_files
