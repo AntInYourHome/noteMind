@@ -9,9 +9,10 @@ import re
 class DocumentIndex:
     """文档索引，用于计算文档间关联度。"""
 
-    def __init__(self):
+    def __init__(self, vault_path: str = None):
         # {note_name: {"path": str, "tags": set, "category": str, "summary": str}}
         self.documents = {}
+        self.vault_path = vault_path
 
     def add(self, note_name: str, path: str, tags: list, category: str, summary: str):
         self.documents[note_name] = {
@@ -20,29 +21,40 @@ class DocumentIndex:
             "category": category or "其他",
             "summary": summary or "",
             # 计算 obsidian wikilink：取 vault 内的相对路径（不含 .md 后缀）
-            "wikilink": self._compute_wikilink(path),
+            "wikilink": self._compute_wikilink(path, self.vault_path),
         }
 
     @staticmethod
-    def _compute_wikilink(abs_path: str) -> str:
+    def _compute_wikilink(abs_path: str, vault_path: str = None) -> str:
         """从绝对路径计算 Obsidian wikilink。
 
-        需要提取 vault 内的相对路径，去掉 .md 后缀。
-        例如: /path/to/vault/安全/操作系统安全/HarmonyOS/2026-05-07-白皮书.md
-        → 安全/操作系统安全/HarmonyOS/2026-05-07-白皮书
+        优先使用 vault 内相对路径（去掉 .md 后缀）。
+        例如: /vault/安全/操作系统安全/2026-05-07-白皮书.md
+        → 安全/操作系统安全/2026-05-07-白皮书
+
+        如果 vault_path 未提供，回退到基于已知分类目录的匹配。
         """
         from pathlib import Path
         p = Path(abs_path)
-        # 去掉 .md 后缀
         stem = p.with_suffix("")
-        # 取 vault 内的相对路径（从分类目录开始）
         parts = stem.parts
-        # 找到分类目录（第一个已知一级分类）
+
+        # 如果提供了 vault_path，优先使用相对路径
+        if vault_path:
+            try:
+                vault_p = Path(vault_path)
+                rel = os.path.relpath(str(stem), str(vault_p))
+                if not rel.startswith(".."):
+                    return rel.replace(os.sep, "/")
+            except (ValueError, OSError):
+                pass
+
+        # 回退：找到第一个已知顶级目录
         known_tops = {"安全", "操作系统", "技术", "个人", "其他"}
         for i, part in enumerate(parts):
             if part in known_tops:
                 return "/".join(parts[i:])
-        # 兜底：用最后两级
+        # 兜底：用最后三级
         return "/".join(parts[-3:]) if len(parts) >= 3 else stem.name
 
     def compute_links(self, max_links: int = 5, min_score: float = 2.0) -> dict[str, list[str]]:

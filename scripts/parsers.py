@@ -179,7 +179,21 @@ def _infer_section_titles(sections: list) -> list:
 
 
 def parse_docx(file_path: str) -> ParseResult:
-    """Word (.docx) → 文字 + 内嵌图片 + 按标题拆分章节（智能 OCR）"""
+    """Word (.docx/.doc) → 文字 + 内嵌图片 + 按标题拆分章节（智能 OCR）
+
+    对于老版本 .doc 文件，尝试通过 LibreOffice 转换为 .docx。
+    """
+    ext = os.path.splitext(file_path)[1].lower()
+
+    # 老版本 .doc 文件需要转换
+    if ext == ".doc":
+        return _convert_old_office(file_path, "docx")
+
+    return _parse_docx_impl(file_path)
+
+
+def _parse_docx_impl(file_path: str) -> ParseResult:
+    """解析 .docx 文件的内部实现。"""
     try:
         from docx import Document
         doc = Document(file_path)
@@ -270,7 +284,16 @@ def parse_docx(file_path: str) -> ParseResult:
 
 
 def parse_pptx(file_path: str) -> ParseResult:
-    """PPT (.pptx) → 逐页文字 + 每页图片（智能 OCR）+ 每页作为一节"""
+    """PPT (.pptx/.ppt) → 逐页文字 + 每页图片（智能 OCR）+ 每页作为一节
+
+    对于老版本 .ppt 文件，尝试通过 LibreOffice 转换为 .pptx。
+    """
+    ext = os.path.splitext(file_path)[1].lower()
+
+    # 老版本 .ppt 文件需要转换
+    if ext == ".ppt":
+        return _parse_old_ppt(file_path)
+
     try:
         from pptx import Presentation
         prs = Presentation(file_path)
@@ -334,7 +357,16 @@ def parse_pptx(file_path: str) -> ParseResult:
 
 
 def parse_excel(file_path: str) -> ParseResult:
-    """Excel (.xlsx) → 文字（按工作表分章节）"""
+    """Excel (.xlsx/.xls) → 文字（按工作表分章节）
+
+    对于老版本 .xls 文件，尝试通过 LibreOffice 转换为 .xlsx。
+    """
+    ext = os.path.splitext(file_path)[1].lower()
+
+    # 老版本 .xls 文件需要转换
+    if ext == ".xls":
+        return _convert_old_office(file_path, "xlsx")
+
     try:
         from openpyxl import load_workbook
         wb = load_workbook(file_path, read_only=True, data_only=True)
@@ -486,7 +518,13 @@ def parse_text(file_path: str) -> ParseResult:
 
 
 def parse_onenote(file_path: str) -> ParseResult:
-    """OneNote (.one) → 文字"""
+    """OneNote (.one) → 文字
+
+    策略：
+    1. 尝试使用 onenote2xml 库
+    2. 失败时，尝试解压 .one 文件（本质是 ZIP 包含 XML）
+    3. 最后 fallback 到二进制文本提取
+    """
     try:
         from onenote2xml import OneNote
         one = OneNote(file_path)
@@ -494,8 +532,31 @@ def parse_onenote(file_path: str) -> ParseResult:
         if isinstance(text, str):
             return ParseResult(text.strip(), [])
         return ParseResult(str(text).strip(), [])
+    except ImportError:
+        # onenote2xml 未安装，尝试 ZIP 解析
+        pass
     except Exception:
-        return ParseResult(_fallback_binary_text(file_path), [])
+        pass
+
+    # 尝试 ZIP 解析（.one 文件本质是 ZIP）
+    try:
+        import zipfile
+        with zipfile.ZipFile(file_path, 'r') as zf:
+            texts = []
+            for name in zf.namelist():
+                if name.endswith('.xml'):
+                    content = zf.read(name).decode('utf-8', errors='ignore')
+                    # 提取 XML 中的文本
+                    import re
+                    text_matches = re.findall(r'<text[^>]*>([^<]+)</text>', content)
+                    texts.extend(text_matches)
+            if texts:
+                return ParseResult("\n".join(texts).strip(), [])
+    except Exception:
+        pass
+
+    # 最终 fallback
+    return ParseResult(_fallback_binary_text(file_path), [])
 
 
 def _fallback_binary_text(file_path: str) -> str:
@@ -528,12 +589,109 @@ PARSERS = {
     ".one": parse_onenote,
 }
 
-IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff", ".tif"}
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff", ".tif", ".svg"}
+
+
+def parse_svg(file_path: str) -> ParseResult:
+    """SVG 矢量图 → 提取文本内容（XML 解析）。"""
+    import xml.etree.ElementTree as ET
+
+    try:
+        tree = ET.parse(file_path)
+        root = tree.getroot()
+
+        # 提取所有文本元素
+        texts = []
+        for elem in root.iter():
+            if elem.text and elem.text.strip():
+                texts.append(elem.text.strip())
+            # 提取 <text> 元素的文本
+            if elem.tag.endswith('text') or 'text' in elem.tag:
+                for child in elem.iter():
+                    if child.text and child.text.strip():
+                        texts.append(child.text.strip())
+
+        text = "\n".join(texts) if texts else ""
+        return ParseResult(text, [file_path], [], [])
+    except Exception:
+        # XML 解析失败，当作普通图片处理
+        return ParseResult("", [file_path], [], [])
+
+
+def _convert_old_office(file_path: str, target_format: str) -> ParseResult:
+    """转换老版本 Office 文件（.doc/.ppt/.xls）通过 LibreOffice。
+
+    Args:
+        file_path: 原始文件路径
+        target_format: 目标格式（"docx", "pptx", "xlsx"）
+
+    Returns:
+        解析结果（成功时调用对应的解析函数）
+    """
+    import subprocess
+    import shutil
+
+    # 检查 LibreOffice 是否可用
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    if not soffice:
+        ext = os.path.splitext(file_path)[1].lower()
+        return ParseResult(
+            f"[老版本 {ext} 文件需要 LibreOffice 转换]\n"
+            "请安装 LibreOffice:\n"
+            "  Linux: apt install libreoffice\n"
+            "  Mac: brew install libreoffice\n"
+            "  Windows: https://www.libreoffice.org/download\n",
+            [],
+            []
+        )
+
+    try:
+        # 创建临时目录存放转换结果
+        tmp_dir = tempfile.mkdtemp(prefix="office_convert_")
+
+        # 转换文件
+        result = subprocess.run(
+            [soffice, "--headless", "--convert-to", target_format, "--outdir", tmp_dir, file_path],
+            capture_output=True,
+            timeout=60,
+        )
+
+        if result.returncode != 0:
+            return ParseResult(f"[转换失败: {result.stderr.decode()}]", [], [])
+
+        # 找到转换后的文件
+        converted_name = os.path.splitext(os.path.basename(file_path))[0] + "." + target_format
+        converted_path = os.path.join(tmp_dir, converted_name)
+
+        if not os.path.exists(converted_path):
+            return ParseResult("[转换后文件不存在]", [], [])
+
+        # 根据目标格式调用对应的解析函数
+        if target_format == "docx":
+            parse_result = _parse_docx_impl(converted_path)
+        elif target_format == "pptx":
+            parse_result = _parse_pptx_impl(converted_path)
+        elif target_format == "xlsx":
+            parse_result = _parse_xlsx_impl(converted_path)
+        else:
+            parse_result = ParseResult("", [], [])
+
+        # 清理临时文件
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+        return parse_result
+
+    except subprocess.TimeoutExpired:
+        return ParseResult("[转换超时]", [], [])
+    except Exception as e:
+        return ParseResult(f"[转换异常: {e}]", [], [])
 
 
 def get_parser(file_path: str):
     """根据文件扩展名返回解析函数。"""
     ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".svg":
+        return parse_svg  # SVG 使用专门的解析函数
     if ext in IMAGE_EXTS:
         return "image"
     return PARSERS.get(ext)
