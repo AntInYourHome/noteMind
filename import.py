@@ -89,18 +89,18 @@ def compute_source_relative_path(file_path: str, source_dir: str, vault_path: st
     """计算 vault 内镜像 source 结构的相对目录路径。
 
     例如: source=/vault/source, file=/vault/source/安全/白皮书.pdf → "安全"
-    文件在 source 根目录时返回 "其他"。
-    source 不在 vault 下时返回 "其他/外部文件"。
+    文件在 source 根目录时返回 ""（空字符串，表示 vault 根目录）。
+    source 不在 vault 下时返回 "外部文件"。
     """
     rel = os.path.relpath(file_path, source_dir)  # e.g., "安全/白皮书.pdf"
     rel_dir = os.path.dirname(rel)                 # e.g., "安全"
     if not rel_dir:
-        return "其他"
+        return ""  # 根目录文件，放在 vault 根目录
     # 安全检查：防止路径穿越
     abs_dest = os.path.normpath(os.path.join(vault_path, rel_dir))
     abs_vault = os.path.normpath(vault_path)
     if not abs_dest.startswith(abs_vault + os.sep) and abs_dest != abs_vault:
-        return "其他/外部文件"
+        return "外部文件"
     return rel_dir
 
 
@@ -292,7 +292,7 @@ def handle_unsupported_file(file_path: str, cfg: dict, vault_path: str, source_d
     if source_dir:
         source_rel = compute_source_relative_path(file_path, source_dir, vault_path)
     else:
-        source_rel = "其他"
+        source_rel = ""  # 根目录
     vault_rel = compute_vault_rel_path(file_path, source_dir or "", vault_path)
 
     # 创建简单的 MD 文档
@@ -459,9 +459,9 @@ def _handle_image_file(file_path, cfg, vault_path, source_dir, fname, safe_name)
     if source_dir:
         source_rel = compute_source_relative_path(file_path, source_dir, vault_path)
     else:
-        source_rel = "其他"
+        source_rel = ""  # 根目录
     vault_rel = compute_vault_rel_path(file_path, source_dir or "", vault_path)
-    dest_dir = os.path.join(vault_path, source_rel)
+    dest_dir = os.path.join(vault_path, source_rel) if source_rel else vault_path
     os.makedirs(dest_dir, exist_ok=True)
     date_str = datetime.now().strftime("%Y-%m-%d")
     builder = MarkdownBuilder(fname, date_str)
@@ -519,7 +519,7 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, source_dir, 
         logger.info(f"  AI 分析完成 (共 {len(analysis.sections)} 章)")
 
         # 分类：使用 source 路径作为分类（镜像 source 目录结构）
-        category = compute_source_relative_path(file_path, source_dir, vault_path) if source_dir else "其他"
+        category = compute_source_relative_path(file_path, source_dir, vault_path) if source_dir else ""
         all_tags = (analysis.tags or [])
 
         # 构建文档大纲（AI 从章节摘要中提取真正的章节标题）
@@ -582,7 +582,7 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, source_dir, 
         logger.info(f"  AI 分析完成 (并发模式)")
 
         # 分类：使用 source 路径作为分类（镜像 source 目录结构）
-        category = compute_source_relative_path(file_path, source_dir, vault_path) if source_dir else "其他"
+        category = compute_source_relative_path(file_path, source_dir, vault_path) if source_dir else ""
         all_tags = (analysis.tags or [])
 
         date_str = datetime.now().strftime("%Y-%m-%d")
@@ -713,7 +713,8 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3, moc_max_entries: int
     # 改用完整 category 路径，而非只存 top_dir
     for note_stem, note_rel, preview in notes:
         # 从 note_rel 提取完整目录路径作为 category
-        note_category = os.path.dirname(note_rel) if "/" in note_rel else "其他"
+        # 根目录文件 category 为空（不分组）
+        note_category = os.path.dirname(note_rel) if "/" in note_rel else ""
 
         # 检查是否为不支持格式（有"未识别格式"标签）
         is_unsupported = False
@@ -796,12 +797,18 @@ def _build_moc_lines(entries: list, total_notes: int, timestamp: str,
     - ##### 四级分类
     -###### 五级分类
 
+    空 category（根目录文件）直接显示在顶部，不分组。
+
     格式: - [[文件名]] 标签
     """
     lines = ["# 知识树\n", f"> 自动更新于 {timestamp}\n"]
 
     if total_parts > 1:
         lines.append(f"\n> 第 {part}/{total_parts} 部分 | 总计 {total_notes} 篇笔记\n")
+
+    # 分离空 category 和有 category 的条目
+    root_entries = [(n, t) for c, n, t in entries if not c]
+    tree_entries = [(c, n, t) for c, n, t in entries if c]
 
     # 构建树形结构
     def build_tree(entries: list) -> dict:
@@ -858,7 +865,17 @@ def _build_moc_lines(entries: list, total_notes: int, timestamp: str,
 
         return result
 
-    tree = build_tree(entries)
+    # 先输出根目录文件（不分组）
+    if root_entries:
+        lines.append(f"\n## 根目录 ({len(root_entries)} 篇)\n")
+        for note_stem, note_tags in root_entries:
+            if note_tags:
+                lines.append(f"- [[{note_stem}]] {note_tags}\n")
+            else:
+                lines.append(f"- [[{note_stem}]]\n")
+
+    # 输出树形结构
+    tree = build_tree(tree_entries)
     lines.extend(render_tree(tree, level=2))
 
     lines.append(f"\n---\n**总计：{total_notes} 篇笔记**\n")
@@ -996,6 +1013,7 @@ def update_unsupported_moc(vault_path: str) -> None:
     """生成不支持格式文件的 MOC 索引（MOC_unsupported.md）。
 
     扫描 vault 中所有带有"未识别格式"标签的 MD 文件，
+    使用多级嵌套结构（与 MOC.md 格式相同）。
     如果没有不支持格式文件，则删除已有的 MOC_unsupported.md。
     """
     from pathlib import Path
@@ -1004,7 +1022,7 @@ def update_unsupported_moc(vault_path: str) -> None:
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     # 扫描 vault 中所有 MD 文件，查找"未识别格式"标签
-    unsupported_entries = []
+    unsupported_entries = []  # (category, note_stem, rel_path)
     for root, _, files in os.walk(vault_path):
         # 排除特殊目录
         if "_failed" in root or "_archive" in root:
@@ -1023,7 +1041,8 @@ def update_unsupported_moc(vault_path: str) -> None:
                         tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
                         if "未识别格式" in tags:
                             rel_path = os.path.relpath(fp, vault_path)
-                            unsupported_entries.append((entry, rel_path))
+                            category = os.path.dirname(rel_path) if "/" in rel_path else ""
+                            unsupported_entries.append((category, Path(entry).stem, rel_path))
                         break
             except Exception:
                 pass
@@ -1035,22 +1054,62 @@ def update_unsupported_moc(vault_path: str) -> None:
             logger.info("无不支持格式文件，已移除 MOC_unsupported.md")
         return
 
+    # 使用多级嵌套结构（复用 MOC.md 的树形逻辑）
+    # 分离空 category 和有 category 的条目
+    root_entries = [(n, r) for c, n, r in unsupported_entries if not c]
+    tree_entries = [(c, n, r) for c, n, r in unsupported_entries if c]
+
+    def build_tree(entries: list) -> dict:
+        tree = {}
+        for category, note_stem, _ in entries:
+            if not category:
+                continue
+            parts = category.split("/")
+            current = tree
+            for i, part in enumerate(parts):
+                if part not in current:
+                    current[part] = {"_notes": [], "_children": {}}
+                if i == len(parts) - 1:
+                    current[part]["_notes"].append(note_stem)
+                current = current[part]["_children"]
+        return tree
+
+    def count_notes(node: dict) -> int:
+        count = len(node["_notes"])
+        for child in node["_children"].values():
+            count += count_notes(child)
+        return count
+
+    def render_tree(tree: dict, level: int = 2) -> list[str]:
+        result = []
+        heading = "#" * level
+        for name in sorted(tree.keys()):
+            node = tree[name]
+            total = count_notes(node)
+            if total > 0:
+                result.append(f"\n{heading} {name} ({total} 篇)\n")
+            for stem in node["_notes"]:
+                result.append(f"- [[{stem}]]\n")
+            if node["_children"] and level < 6:
+                result.extend(render_tree(node["_children"], level + 1))
+        return result
+
     # 生成 MOC_unsupported.md
     lines = [
         "# 不支持格式文件\n",
         f"> 自动更新于 {timestamp}\n",
         f"\n共 {len(unsupported_entries)} 个文件格式不支持。\n",
-        "\n",
     ]
 
-    for md_name, rel_path in unsupported_entries:
-        note_stem = Path(md_name).stem
-        parent_dir = os.path.dirname(rel_path)
-        if parent_dir:
-            lines.append(f"- [[{note_stem}]] {parent_dir}\n")
-        else:
+    # 先输出根目录文件（不分组）
+    if root_entries:
+        lines.append(f"\n## 根目录 ({len(root_entries)} 篇)\n")
+        for note_stem, _ in root_entries:
             lines.append(f"- [[{note_stem}]]\n")
 
+    # 输出树形结构
+    tree = build_tree(tree_entries)
+    lines.extend(render_tree(tree, level=2))
     lines.append(f"\n> 由 NoteMind 自动生成于 {timestamp}\n")
 
     with open(moc_unsupported_path, "w", encoding="utf-8") as f:
@@ -1078,7 +1137,7 @@ def align_vault_dirs_to_source(vault_path: str, source_dir: str) -> dict:
     for root, _, files in os.walk(source_dir):
         rel_dir = os.path.relpath(root, source_dir)
         if rel_dir == ".":
-            rel_dir = "其他"
+            rel_dir = ""  # 根目录
         for f in files:
             stem = Path(f).stem
             source_map[stem] = rel_dir
@@ -1242,7 +1301,7 @@ def update_existing_docs(vault_path: str, source_dir: str) -> None:
                     with open(fp, "r", encoding="utf-8") as fh:
                         preview = fh.read(500)
                     tags = []
-                    category = "其他"
+                    category = ""  # 从 frontmatter 读取
                     for line in preview.split("\n"):
                         if line.startswith("tags:"):
                             tags_raw = line[len("tags:"):].strip().strip("[]")
@@ -1355,7 +1414,7 @@ def migrate_existing_docs(vault_path: str, source_dir: str) -> None:
                         preview = fh.read(500)
                     # 提取 frontmatter 信息
                     tags = []
-                    category = "其他"
+                    category = ""  # 从 frontmatter 读取
                     for line in preview.split("\n"):
                         if line.startswith("tags:"):
                             tags_raw = line[len("tags:"):].strip().strip("[]")
@@ -1490,9 +1549,11 @@ def main():
                 result = handle_unsupported_file(file_path, cfg, vault_path, source)
                 if result["status"] == "ok":
                     stats["ok"] += 1
-                    update_moc(vault_path)  # 实时更新 MOC
-                    update_unsupported_moc(vault_path)  # 实时更新不支持格式索引
         logger.info(f"不支持的格式处理完成: {len(unsupported_files)} 个文件已创建链接")
+        # 统一建立索引（不实时更新）
+        if not args.dry_run:
+            update_moc(vault_path)
+            update_unsupported_moc(vault_path)
 
     files = parseable_files
     if not files:
