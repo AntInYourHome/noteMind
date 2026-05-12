@@ -1419,6 +1419,9 @@ def main():
                 "category": result["category"],
                 "summary": result.get("summary", ""),
             })
+            # 实时更新 MOC（每处理完一个文件）
+            if not args.dry_run:
+                update_moc(vault_path)
 
         else:
             record_status(vault_path, file_path, "failed", None, None, result["error"])
@@ -1427,6 +1430,7 @@ def main():
             # 为失败文件创建 MD 记录到 _failed 目录
             if not args.dry_run:
                 _create_failed_record(vault_path, file_path, result.get("error", "未知错误"), source)
+                update_failed_moc(vault_path)  # 实时更新失败文件索引
 
         # 进度日志（每 10 个文件打印一次）
         processed_count += 1
