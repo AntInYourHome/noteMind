@@ -915,7 +915,7 @@ def _create_failed_record(vault_path: str, source_file: str, error_msg: str, sou
     vault_rel = ""
     if source_dir:
         try:
-            vault_rel = os.path.relpath(source_file, source_dir)
+            vault_rel = os.path.relpath(source_file, source_dir).replace(os.sep, "/")
         except (ValueError, OSError):
             vault_rel = fname
     else:
@@ -1044,7 +1044,7 @@ def update_unsupported_moc(vault_path: str) -> None:
                         tags_raw = line[len("tags:"):].strip().strip("[]")
                         tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
                         if "未识别格式" in tags:
-                            rel_path = os.path.relpath(fp, vault_path)
+                            rel_path = os.path.relpath(fp, vault_path).replace(os.sep, "/")
                             category = os.path.dirname(rel_path).replace(os.sep, "/") if os.sep in rel_path else ""
                             unsupported_entries.append((category, Path(entry).stem, rel_path))
                         break
