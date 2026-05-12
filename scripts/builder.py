@@ -28,7 +28,7 @@ class MarkdownBuilder:
         """
         self._category = category
         self._tags = tags
-        tags_str = ", ".join(tags)
+        tags_str = ", ".join(tags or [])
         frontmatter_lines = [
             f"source: {self.source_name}",
             f"date: {self.date_str}",
@@ -104,20 +104,26 @@ class MarkdownBuilder:
             self.parts.append(f"- 路径：`{source_path}`\n\n")
         return self
 
-    def add_archive_link(self, archive_filename: str, category: str, source_path: str = None) -> "MarkdownBuilder":
+    def add_archive_link(self, archive_filename: str, category: str = None, original_path: str = None) -> "MarkdownBuilder":
         """添加源文件 wikilink（不再归档文件，只记录链接）。
 
         Args:
             archive_filename: 源文件名
             category: 分类路径（用于显示）
-            source_path: 源文件完整路径（可选）
+            original_path: 源文件相对于 vault 的路径（用于正确链接）
         """
         if not archive_filename:
             return self
 
-        stem = Path(archive_filename).stem
-        self.parts.append("## 原始文件\n")
-        self.parts.append(f"- 原文：[[{stem}]]\n\n")
+        # 优先使用 original_path（带路径的 wikilink），回退到仅文件名
+        if original_path:
+            link_path = Path(original_path).with_suffix("")
+            self.parts.append("## 原始文件\n")
+            self.parts.append(f"- 原文：[[{link_path}]]\n\n")
+        else:
+            stem = Path(archive_filename).stem
+            self.parts.append("## 原始文件\n")
+            self.parts.append(f"- 原文：[[{stem}]]\n\n")
         return self
 
     def add_tags_section(self, tags: list[str]) -> "MarkdownBuilder":

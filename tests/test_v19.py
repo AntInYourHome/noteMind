@@ -155,7 +155,7 @@ def test_file_update_detection():
 
 
 def test_unsupported_file_handling():
-    """测试不支持的文件格式处理。"""
+    """测试不支持的文件格式处理（仅记录索引，不创建 MD）。"""
     print("\n[V19-05] import.py — 不支持文件格式处理")
     test_dir, source, vault = setup_test_env()
     try:
@@ -168,19 +168,13 @@ def test_unsupported_file_handling():
             f.write("不支持格式内容")
 
         cfg = {"vault": {"categories": {"其他": []}}, "import": {}}
-        result = import_module.handle_unsupported_file(test_file, cfg, vault)
+        result = import_module.handle_unsupported_file(test_file, cfg, vault, source)
 
         check("处理返回 success", result["status"] == "ok")
-        check("分类为 其他/未识别格式", result["category"] == "其他/未识别格式")
-
-        md_path = result["path"]
-        check("MD 文件已创建", os.path.exists(md_path))
-
-        with open(md_path, "r") as f:
-            content = f.read()
-        # 新格式：使用 wikilink 或文件名引用
-        check("MD 包含源文件引用",
-              "## 原始文件" in content or "## 原文位置" in content or "test.xyz" in content)
+        check("不创建 MD 文件", result["path"] is None)
+        check("返回文件类型", result["file_type"] == ".xyz")
+        check("返回文件名", "test.xyz" in result["file_name"])
+        check("返回分类路径", isinstance(result["category"], str))
 
     finally:
         cleanup(test_dir)
