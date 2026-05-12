@@ -232,8 +232,10 @@ A: JPG、PNG、GIF、BMP、WebP、TIFF、SVG。
 
 - **分类改用 source 路径**：`category` 不再使用 AI 分类，改为镜像 `--source` 中文档所在目录路径
 - **`--update` 校验修复**：校验并修复已有 MD 文件的分类和目录映射，重建 MOC 和双链
+- **MOC 多级嵌套**：按 source 路径层级分组，最多支持 5 级（`##` → `######`）
+- **MOC 实时更新**：每处理完一个文件立即更新 MOC.md
+- **`MOC_unsupported.md`**：不支持格式文件单独索引
 - **删除 `_classify_document` 函数**：动态/静态分类器不再用于分类（AI 标签提取保留）
-- **修复 `classify_input` 未定义 bug**
 
 ### v1.9.5 (2026-05-12)
 
