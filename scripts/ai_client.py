@@ -721,6 +721,121 @@ def print_api_test_report(results: dict):
     logger.info("=" * 50)
 
 
+def test_image_analysis(pool: "APIProviderPool", image_path: str = None) -> dict:
+    """测试多模态 provider 的图片分析能力。
+
+    使用一张测试图片调用支持 multimodal 的 provider，验证图片解析是否正常工作。
+
+    Args:
+        pool: Provider 池
+        image_path: 测试图片路径（如果没有则跳过）
+
+    Returns:
+        {"total": n, "multimodal_count": n, "available": n, "details": [...]}
+    """
+    results = {
+        "total": 0,
+        "multimodal_count": 0,
+        "available": 0,
+        "tested": False,
+        "details": [],
+    }
+
+    # 统计 multimodal provider
+    for i, provider in enumerate(pool.providers):
+        if provider.get("multimodal", False):
+            results["multimodal_count"] += 1
+
+    if results["multimodal_count"] == 0:
+        results["details"].append({"model": "N/A", "status": "未配置多模态 provider"})
+        return results
+
+    if not image_path or not os.path.exists(image_path):
+        results["details"].append({"model": "N/A", "status": "无测试图片，跳过"})
+        return results
+
+    results["tested"] = True
+
+    # 测试每个 multimodal provider
+    for i, provider in enumerate(pool.providers):
+        if not provider.get("multimodal", False):
+            continue
+
+        model = provider.get("model", "unknown")
+        tracker = pool._trackers[i]
+        results["total"] += 1
+
+        try:
+            # 读取图片为 base64
+            with open(image_path, "rb") as f:
+                img_b64 = base64.b64encode(f.read()).decode("utf-8")
+
+            ext = Path(image_path).suffix.lower().lstrip(".")
+            mime = f"image/{ext}"
+            if ext == "jpg":
+                mime = "image/jpeg"
+
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "描述这张图片的内容，用中文，一句话。"},
+                        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_b64}"}},
+                    ],
+                }
+            ]
+
+            result = pool.call(messages, max_tokens=100, retries=1, multimodal=True)
+            content = result.get("content", "") if isinstance(result, dict) else ""
+            if content and content != "[空响应]":
+                results["available"] += 1
+                results["details"].append({
+                    "model": model,
+                    "status": "可用",
+                    "latency": result.get("latency", 0),
+                    "preview": content[:80],
+                })
+                tracker.record_success()
+            else:
+                raise RuntimeError("空响应")
+        except Exception as e:
+            results["details"].append({
+                "model": model,
+                "status": f"不可用: {e}",
+            })
+
+    return results
+
+
+def print_image_test_report(results: dict):
+    """打印图片模型测试报告。"""
+    logger.info("=" * 50)
+    logger.info("图片模型解析能力测试")
+    logger.info("=" * 50)
+    logger.info(f"  多模态 provider: {results['multimodal_count']} 个")
+    if not results.get("tested"):
+        for d in results["details"]:
+            logger.info(f"  ⚠️  {d['model']} | {d['status']}")
+        logger.info("=" * 50)
+        return
+
+    for d in results["details"]:
+        if d["status"] == "可用":
+            logger.info(f"  ✅ {d['model']} | 延迟: {d.get('latency', 0):.2f}s | 状态: 可用")
+            if d.get("preview"):
+                logger.info(f"     预览: {d['preview']}")
+        else:
+            logger.info(f"  ❌ {d['model']} | {d['status']}")
+    logger.info("-" * 50)
+    logger.info(
+        f"  总计: {results['total']} | 可用: {results['available']} | "
+        f"不可用: {results['total'] - results['available']}"
+    )
+    if results["available"] == 0 and results["multimodal_count"] > 0:
+        logger.warning("  ⚠️  图片模型全部不可用，处理图片时将使用 OCR 降级")
+    logger.info("=" * 50)
+
+
 def analyze_image(image_path: str) -> str:
     """分析图片内容，返回概要。使用本地 MiniMind-V 模型。
 

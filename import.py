@@ -475,19 +475,20 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, fname, safe_
     }
 
 
-def update_moc(vault_path: str, max_tags_per_note: int = 3) -> None:
+def update_moc(vault_path: str, max_tags_per_note: int = 3, moc_max_entries: int = 500) -> None:
     """更新知识树 MOC (Map of Content)。
+
+    当笔记总数超过 moc_max_entries 时，自动分割为 MOC_1.md, MOC_2.md 等文件，
+    每个文件最多包含 moc_max_entries 条笔记。
 
     Args:
         vault_path: Vault 根目录
         max_tags_per_note: 每个笔记最多显示标签数（防止标签过多导致卡顿）
+        moc_max_entries: 单个 MOC 文件最大条目数，超过时自动分割
     """
     cfg = load_config()
     categories = cfg["vault"].get("categories", {"其他": []})
-    moc_path = os.path.join(vault_path, "MOC.md")
-
-    lines = ["# 知识树\n", f"> 自动更新于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"]
-    total_notes = 0
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     if isinstance(categories, dict):
         # 多级分类树：按一级分类组织，递归扫描子目录
@@ -518,6 +519,10 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3) -> None:
                     pass
         return results
 
+    # 收集所有笔记条目
+    all_entries = []  # (top_dir, note_stem, note_rel, note_tags)
+    total_notes = 0
+
     for top_dir in sorted(top_dirs):
         top_path = os.path.join(vault_path, top_dir)
         if not os.path.isdir(top_path):
@@ -527,9 +532,7 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3) -> None:
         if not notes:
             continue
 
-        lines.append(f"\n## {top_dir} ({len(notes)} 篇)\n")
         for note_stem, note_rel, preview in notes:
-            note_path = Path(note_rel).with_suffix("")
             note_tags = ""
             try:
                 for line in preview.split("\n"):
@@ -543,13 +546,70 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3) -> None:
                         break
             except Exception:
                 pass
-            lines.append(f"- [[{note_rel}|{note_stem}]] {note_tags}\n")
+            all_entries.append((top_dir, note_stem, note_rel, note_tags))
             total_notes += 1
 
+    # 根据总数量决定分割策略
+    if total_notes <= moc_max_entries:
+        # 不分割，单文件
+        moc_paths = [os.path.join(vault_path, "MOC.md")]
+        parts_list = [_build_moc_lines(all_entries, total_notes, timestamp)]
+    else:
+        # 分割为多个文件
+        num_parts = (total_notes + moc_max_entries - 1) // moc_max_entries
+        moc_paths = []
+        parts_list = []
+        for i in range(num_parts):
+            start = i * moc_max_entries
+            end = min(start + moc_max_entries, total_notes)
+            part_entries = all_entries[start:end]
+            moc_path_i = os.path.join(vault_path, f"MOC_{i+1}.md")
+            moc_paths.append(moc_path_i)
+            parts_list.append(_build_moc_lines(part_entries, total_notes, timestamp,
+                                               part=i+1, total_parts=num_parts))
+
+    # 清理旧的 MOC 文件（可能是不需要的分割文件）
+    for old_moc in os.listdir(vault_path):
+        if old_moc.startswith("MOC") and old_moc.endswith(".md"):
+            old_path = os.path.join(vault_path, old_moc)
+            if old_path not in moc_paths:
+                try:
+                    os.remove(old_path)
+                except Exception:
+                    pass
+
+    # 写入文件
+    for moc_path, content_lines in zip(moc_paths, parts_list):
+        with open(moc_path, "w", encoding="utf-8") as f:
+            f.writelines(content_lines)
+
+    if len(moc_paths) == 1:
+        logger.info(f"知识树已更新: {moc_paths[0]} ({total_notes} 篇笔记)")
+    else:
+        logger.info(f"知识树已更新: {len(moc_paths)} 个文件, 共 {total_notes} 篇笔记")
+
+
+def _build_moc_lines(entries: list, total_notes: int, timestamp: str,
+                     part: int = 0, total_parts: int = 0) -> list[str]:
+    """构建 MOC 文件的行。"""
+    lines = ["# 知识树\n", f"> 自动更新于 {timestamp}\n"]
+
+    if total_parts > 1:
+        lines.append(f"\n> 第 {part}/{total_parts} 部分 | 总计 {total_notes} 篇笔记\n")
+
+    # 按 top_dir 分组
+    grouped = {}
+    for top_dir, note_stem, note_rel, note_tags in entries:
+        grouped.setdefault(top_dir, []).append((note_stem, note_rel, note_tags))
+
+    for top_dir in sorted(grouped.keys()):
+        notes = grouped[top_dir]
+        lines.append(f"\n## {top_dir} ({len(notes)} 篇)\n")
+        for note_stem, note_rel, note_tags in notes:
+            lines.append(f"- [[{note_rel}|{note_stem}]] {note_tags}\n")
+
     lines.append(f"\n---\n**总计：{total_notes} 篇笔记**\n")
-    with open(moc_path, "w", encoding="utf-8") as f:
-        f.writelines(lines)
-    logger.info(f"知识树已更新: {moc_path} ({total_notes} 篇笔记)")
+    return lines
 
 
 def main():
@@ -629,6 +689,14 @@ def main():
     if not files:
         logger.warning("未找到可处理的文件")
         return
+
+    # 测试图片模型解析能力（仅当有图片文件时）
+    from scripts.ai_client import APIProviderPool, get_pool, test_image_analysis, print_image_test_report
+    img_files = [f for f in files if Path(f).suffix.lower() in ('.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp')]
+    if img_files and providers:
+        pool = get_pool()
+        img_results = test_image_analysis(pool, img_files[0])
+        print_image_test_report(img_results)
 
     stats = {"ok": 0, "failed": 0, "skipped": 0}
     start_time = time.time()
