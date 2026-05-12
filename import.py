@@ -91,8 +91,9 @@ def compute_source_relative_path(file_path: str, source_dir: str, vault_path: st
     例如: source=/vault/source, file=/vault/source/安全/白皮书.pdf → "安全"
     文件在 source 根目录时返回 ""（空字符串，表示 vault 根目录）。
     source 不在 vault 下时返回 "外部文件"。
+    返回值统一使用 '/' 分隔符，确保跨设备同步兼容。
     """
-    rel = os.path.relpath(file_path, source_dir)  # e.g., "安全/白皮书.pdf"
+    rel = os.path.relpath(file_path, source_dir)  # e.g., "安全/白皮书.pdf" 或 "安全\\白皮书.pdf" (Windows)
     rel_dir = os.path.dirname(rel)                 # e.g., "安全"
     if not rel_dir:
         return ""  # 根目录文件，放在 vault 根目录
@@ -101,7 +102,8 @@ def compute_source_relative_path(file_path: str, source_dir: str, vault_path: st
     abs_vault = os.path.normpath(vault_path)
     if not abs_dest.startswith(abs_vault + os.sep) and abs_dest != abs_vault:
         return "外部文件"
-    return rel_dir
+    # 统一用 '/' 分隔符（跨平台兼容，支持 vault 跨设备同步）
+    return rel_dir.replace(os.sep, "/")
 
 
 def compute_vault_rel_path(file_path: str, source_dir: str, vault_path: str) -> str:
@@ -109,17 +111,18 @@ def compute_vault_rel_path(file_path: str, source_dir: str, vault_path: str) -> 
 
     如果 source 在 vault 下，返回 vault 内相对路径。
     否则返回 source_dir 内的相对路径（带 source/ 前缀）。
+    返回值统一使用 '/' 分隔符，确保跨设备同步兼容。
     """
     try:
         rel = os.path.relpath(file_path, vault_path)
         if not rel.startswith(".."):
-            return rel
+            return rel.replace(os.sep, "/")
     except (ValueError, OSError):
         pass
     # source 在 vault 外，使用 source 内相对路径
     try:
         src_rel = os.path.relpath(file_path, source_dir)
-        return f"source/{src_rel}"
+        return "source/" + src_rel.replace(os.sep, "/")
     except (ValueError, OSError):
         return os.path.basename(file_path)
 
@@ -714,7 +717,8 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3, moc_max_entries: int
     for note_stem, note_rel, preview in notes:
         # 从 note_rel 提取完整目录路径作为 category
         # 根目录文件 category 为空（不分组）
-        note_category = os.path.dirname(note_rel) if "/" in note_rel else ""
+        # 统一用 '/' 分隔符（与 compute_source_relative_path 保持一致）
+        note_category = os.path.dirname(note_rel).replace(os.sep, "/") if os.sep in note_rel else ""
 
         # 检查是否为不支持格式（有"未识别格式"标签）
         is_unsupported = False
@@ -1041,7 +1045,7 @@ def update_unsupported_moc(vault_path: str) -> None:
                         tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
                         if "未识别格式" in tags:
                             rel_path = os.path.relpath(fp, vault_path)
-                            category = os.path.dirname(rel_path) if "/" in rel_path else ""
+                            category = os.path.dirname(rel_path).replace(os.sep, "/") if os.sep in rel_path else ""
                             unsupported_entries.append((category, Path(entry).stem, rel_path))
                         break
             except Exception:
