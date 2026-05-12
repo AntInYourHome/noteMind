@@ -710,9 +710,10 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3, moc_max_entries: int
     total_notes = 0
     notes = _scan_notes(vault_path, "", {"_failed", "_archive"})
 
+    # 改用完整 category 路径，而非只存 top_dir
     for note_stem, note_rel, preview in notes:
-        # 从 note_rel 提取第一级目录作为分组
-        top_dir = note_rel.split("/")[0] if "/" in note_rel else "其他"
+        # 从 note_rel 提取完整目录路径作为 category
+        note_category = os.path.dirname(note_rel) if "/" in note_rel else "其他"
 
         # 检查是否为不支持格式（有"未识别格式"标签）
         is_unsupported = False
@@ -736,7 +737,8 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3, moc_max_entries: int
         if is_unsupported:
             continue
 
-        all_entries.append((top_dir, note_stem, note_rel, note_tags))
+        # 存储完整 category 路径
+        all_entries.append((note_category, note_stem, note_tags))
         total_notes += 1
 
     # 根据总数量决定分割策略
@@ -785,30 +787,79 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3, moc_max_entries: int
 
 def _build_moc_lines(entries: list, total_notes: int, timestamp: str,
                      part: int = 0, total_parts: int = 0) -> list[str]:
-    """构建 MOC 文件的行。
+    """构建 MOC 文件的行（多级嵌套结构）。
 
-    新格式: - [[文件名]] 父目录 标签
-    例如:   - [[2026-05-07-白皮书]] 安全/操作系统安全/HarmonyOS `#白皮书` `#架构`
+    按完整路径层级分组，最多支持 5 级：
+    - ## 一级分类
+    - ### 二级分类
+    - #### 三级分类
+    - ##### 四级分类
+    -###### 五级分类
+
+    格式: - [[文件名]] 标签
     """
     lines = ["# 知识树\n", f"> 自动更新于 {timestamp}\n"]
 
     if total_parts > 1:
         lines.append(f"\n> 第 {part}/{total_parts} 部分 | 总计 {total_notes} 篇笔记\n")
 
-    # 按 top_dir 分组
-    grouped = {}
-    for top_dir, note_stem, note_rel, note_tags in entries:
-        grouped.setdefault(top_dir, []).append((note_stem, note_rel, note_tags))
+    # 构建树形结构
+    def build_tree(entries: list) -> dict:
+        """构建嵌套树结构。"""
+        tree = {}
+        for category, note_stem, note_tags in entries:
+            parts = category.split("/")
+            current = tree
+            # 遍历每一级路径，创建节点
+            for i, part in enumerate(parts):
+                if part not in current:
+                    current[part] = {"_notes": [], "_children": {}}
+                # 在最后一级添加笔记
+                if i == len(parts) - 1:
+                    current[part]["_notes"].append((note_stem, note_tags))
+                # 进入下一级
+                current = current[part]["_children"]
+        return tree
 
-    for top_dir in sorted(grouped.keys()):
-        notes = grouped[top_dir]
-        lines.append(f"\n## {top_dir} ({len(notes)} 篇)\n")
-        for note_stem, note_rel, note_tags in notes:
-            note_parent = os.path.dirname(note_rel)  # e.g., "安全/操作系统安全"
-            if note_parent:
-                lines.append(f"- [[{note_stem}]] {note_parent} {note_tags}\n")
-            else:
-                lines.append(f"- [[{note_stem}]] {note_tags}\n")
+    def count_notes(node: dict) -> int:
+        """计算节点下所有笔记数。"""
+        count = len(node["_notes"])
+        for child in node["_children"].values():
+            count += count_notes(child)
+        return count
+
+    def render_tree(tree: dict, level: int = 2) -> list[str]:
+        """递归渲染树结构为 Markdown 行。"""
+        result = []
+        heading_prefix = "#" * level
+
+        # 按名称排序
+        for name in sorted(tree.keys()):
+            node = tree[name]
+            notes = node["_notes"]
+            children = node["_children"]
+
+            # 计算该节点下所有笔记数（包括子节点）
+            total_count = count_notes(node)
+
+            if total_count > 0:
+                result.append(f"\n{heading_prefix} {name} ({total_count} 篇)\n")
+
+            # 输出当前节点的笔记
+            for note_stem, note_tags in notes:
+                if note_tags:
+                    result.append(f"- [[{note_stem}]] {note_tags}\n")
+                else:
+                    result.append(f"- [[{note_stem}]]\n")
+
+            # 递归渲染子节点（最多到 level 6，即 ######）
+            if children and level < 6:
+                result.extend(render_tree(children, level + 1))
+
+        return result
+
+    tree = build_tree(entries)
+    lines.extend(render_tree(tree, level=2))
 
     lines.append(f"\n---\n**总计：{total_notes} 篇笔记**\n")
     return lines
