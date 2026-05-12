@@ -1025,7 +1025,7 @@ def update_unsupported_moc(vault_path: str, unsupported_files: list = None) -> N
                 conn = sqlite3.connect(db_path)
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT original_path, category FROM status WHERE status = 'unsupported'"
+                    "SELECT source_path, category FROM file_status WHERE status = 'unsupported'"
                 )
                 for row in cursor.fetchall():
                     orig_path, category = row
