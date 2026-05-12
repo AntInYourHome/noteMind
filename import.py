@@ -688,7 +688,7 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3, moc_max_entries: int
             entry_rel = os.path.join(rel_path, entry) if rel_path else entry
             if os.path.isdir(full_entry) and not entry.startswith("."):
                 results.extend(_scan_notes(full_entry, entry_rel))
-            elif entry.endswith(".md") and not entry.startswith("."):
+            elif entry.endswith(".md") and not entry.startswith(".") and not entry.startswith("MOC"):
                 try:
                     with open(full_entry, "r", encoding="utf-8") as nf:
                         preview = nf.read(500)
