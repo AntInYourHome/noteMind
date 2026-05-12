@@ -670,6 +670,7 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3, moc_max_entries: int
 
     扫描整个 vault 目录（不再按 config categories 分组），
     按 source 镜像目录结构组织 MOC 条目。
+    排除 _failed 目录和不支持格式文件。
 
     Args:
         vault_path: Vault 根目录
@@ -678,41 +679,51 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3, moc_max_entries: int
     """
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    def _scan_notes(dir_path: str, rel_path: str) -> list[tuple[str, str, str]]:
+    def _scan_notes(dir_path: str, rel_path: str, exclude_dirs: set = None) -> list[tuple[str, str, str]]:
         """递归扫描目录，返回 [(note_stem, full_rel_path, content_preview), ...]。"""
         results = []
         if not os.path.isdir(dir_path):
             return results
+        if exclude_dirs is None:
+            exclude_dirs = {"_failed", "_archive"}
         for entry in sorted(os.listdir(dir_path)):
             full_entry = os.path.join(dir_path, entry)
             entry_rel = os.path.join(rel_path, entry) if rel_path else entry
-            if os.path.isdir(full_entry) and not entry.startswith("."):
-                results.extend(_scan_notes(full_entry, entry_rel))
-            elif entry.endswith(".md") and not entry.startswith(".") and not entry.startswith("MOC"):
+            # 排除特殊目录
+            if entry in exclude_dirs or entry.startswith("."):
+                continue
+            if os.path.isdir(full_entry):
+                results.extend(_scan_notes(full_entry, entry_rel, exclude_dirs))
+            elif entry.endswith(".md") and not entry.startswith("MOC"):
                 try:
                     with open(full_entry, "r", encoding="utf-8") as nf:
                         preview = nf.read(500)
+                    # 排除章节文件（有 parent:）和索引文件
                     if "parent:" not in preview or "doc_type: index" in preview:
                         results.append((Path(entry).stem, entry_rel, preview))
                 except Exception:
                     pass
         return results
 
-    # 扫描整个 vault，不再按 config categories 分组
-    all_entries = []  # (top_dir, note_stem, note_rel, note_tags)
+    # 扫描 vault（排除 _failed, _archive）
+    all_entries = []
     total_notes = 0
-    notes = _scan_notes(vault_path, "")
+    notes = _scan_notes(vault_path, "", {"_failed", "_archive"})
 
     for note_stem, note_rel, preview in notes:
         # 从 note_rel 提取第一级目录作为分组
         top_dir = note_rel.split("/")[0] if "/" in note_rel else "其他"
 
+        # 检查是否为不支持格式（有"未识别格式"标签）
+        is_unsupported = False
         note_tags = ""
         try:
             for line in preview.split("\n"):
                 if line.startswith("tags:"):
                     tags_raw = line[len("tags:"):].strip().strip("[]")
                     tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
+                    if "未识别格式" in tags:
+                        is_unsupported = True
                     display_tags = tags[:max_tags_per_note]
                     note_tags = ", ".join([f"`#{t}`" for t in display_tags])
                     if len(tags) > max_tags_per_note:
@@ -720,6 +731,11 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3, moc_max_entries: int
                     break
         except Exception:
             pass
+
+        # 排除不支持格式的文件（它们会在 MOC_unsupported.md 中单独列出）
+        if is_unsupported:
+            continue
+
         all_entries.append((top_dir, note_stem, note_rel, note_tags))
         total_notes += 1
 
@@ -743,8 +759,12 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3, moc_max_entries: int
                                                part=i+1, total_parts=num_parts))
 
     # 清理旧的 MOC 文件（可能是不需要的分割文件）
+    # 保留 MOC_unsupported.md 和 MOC_fail.md
+    preserve_mocs = {"MOC_unsupported.md", "MOC_fail.md"}
     for old_moc in os.listdir(vault_path):
         if old_moc.startswith("MOC") and old_moc.endswith(".md"):
+            if old_moc in preserve_mocs:
+                continue
             old_path = os.path.join(vault_path, old_moc)
             if old_path not in moc_paths:
                 try:
@@ -921,6 +941,73 @@ def update_failed_moc(vault_path: str) -> None:
     logger.info(f"失败文件索引已更新: {moc_fail_path} ({len(failed_entries)} 个)")
 
 
+def update_unsupported_moc(vault_path: str) -> None:
+    """生成不支持格式文件的 MOC 索引（MOC_unsupported.md）。
+
+    扫描 vault 中所有带有"未识别格式"标签的 MD 文件，
+    如果没有不支持格式文件，则删除已有的 MOC_unsupported.md。
+    """
+    from pathlib import Path
+
+    moc_unsupported_path = os.path.join(vault_path, "MOC_unsupported.md")
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    # 扫描 vault 中所有 MD 文件，查找"未识别格式"标签
+    unsupported_entries = []
+    for root, _, files in os.walk(vault_path):
+        # 排除特殊目录
+        if "_failed" in root or "_archive" in root:
+            continue
+        for entry in files:
+            if not entry.endswith(".md") or entry.startswith("MOC"):
+                continue
+            fp = os.path.join(root, entry)
+            try:
+                with open(fp, "r", encoding="utf-8") as f:
+                    preview = f.read(500)
+                # 检查是否有"未识别格式"标签
+                for line in preview.split("\n"):
+                    if line.startswith("tags:"):
+                        tags_raw = line[len("tags:"):].strip().strip("[]")
+                        tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
+                        if "未识别格式" in tags:
+                            rel_path = os.path.relpath(fp, vault_path)
+                            unsupported_entries.append((entry, rel_path))
+                        break
+            except Exception:
+                pass
+
+    if not unsupported_entries:
+        # 没有不支持格式文件，清理已有的 MOC_unsupported.md
+        if os.path.exists(moc_unsupported_path):
+            os.remove(moc_unsupported_path)
+            logger.info("无不支持格式文件，已移除 MOC_unsupported.md")
+        return
+
+    # 生成 MOC_unsupported.md
+    lines = [
+        "# 不支持格式文件\n",
+        f"> 自动更新于 {timestamp}\n",
+        f"\n共 {len(unsupported_entries)} 个文件格式不支持。\n",
+        "\n",
+    ]
+
+    for md_name, rel_path in unsupported_entries:
+        note_stem = Path(md_name).stem
+        parent_dir = os.path.dirname(rel_path)
+        if parent_dir:
+            lines.append(f"- [[{note_stem}]] {parent_dir}\n")
+        else:
+            lines.append(f"- [[{note_stem}]]\n")
+
+    lines.append(f"\n> 由 NoteMind 自动生成于 {timestamp}\n")
+
+    with open(moc_unsupported_path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+    logger.info(f"不支持格式索引已更新: {moc_unsupported_path} ({len(unsupported_entries)} 个)")
+
+
 def align_vault_dirs_to_source(vault_path: str, source_dir: str) -> dict:
     """根据 source 目录结构对齐 vault 中的 MD 文件目录。
 
@@ -1085,6 +1172,7 @@ def update_existing_docs(vault_path: str, source_dir: str) -> None:
     # 重建 MOC
     logger.info("重建 MOC...")
     update_moc(vault_path)
+    update_unsupported_moc(vault_path)
     update_failed_moc(vault_path)
 
     # 重建双链
@@ -1195,6 +1283,7 @@ def migrate_existing_docs(vault_path: str, source_dir: str) -> None:
     # 2. 重建 MOC
     logger.info("重建 MOC...")
     update_moc(vault_path)
+    update_unsupported_moc(vault_path)
     update_failed_moc(vault_path)
 
     # 3. 重建双链
@@ -1351,12 +1440,14 @@ def main():
                 if result["status"] == "ok":
                     stats["ok"] += 1
                     update_moc(vault_path)  # 实时更新 MOC
+                    update_unsupported_moc(vault_path)  # 实时更新不支持格式索引
         logger.info(f"不支持的格式处理完成: {len(unsupported_files)} 个文件已创建链接")
 
     files = parseable_files
     if not files:
         logger.info("所有可解析文件为空，仅处理了不支持的格式")
         update_moc(vault_path)
+        update_unsupported_moc(vault_path)
         update_failed_moc(vault_path)
         return
 
