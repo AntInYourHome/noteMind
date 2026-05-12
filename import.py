@@ -386,7 +386,6 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, source_dir: str = No
     所有异常均在内部捕获并返回 fail 状态，保证不会中断批量处理流程。
     """
     from scripts.analyzer import AnalysisContext
-    from scripts.classifier import classify
     from scripts.builder import MarkdownBuilder
     from scripts.parsers import get_parser
 
@@ -414,7 +413,6 @@ def handle_file(file_path: str, cfg: dict, vault_path: str, source_dir: str = No
 def _handle_file_impl(file_path, cfg, vault_path, source_dir, fname, safe_name, cleanup_paths) -> dict:
     """handle_file 的实际实现。"""
     from scripts.analyzer import AnalysisContext
-    from scripts.classifier import classify
     from scripts.builder import MarkdownBuilder
     from scripts.parsers import get_parser, IMAGE_EXTS
 
@@ -543,13 +541,13 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, source_dir, 
         # 生成全文概述（AI 综合所有章节摘要）
         from scripts.ai_client import generate_summary
         overview = ""
-        classify_input = "".join(sr.get("summary", "") + "\n" for sr in analysis.sections if sr.get("summary"))
-        if classify_input.strip():
+        overview_input = "".join(sr.get("summary", "") + "\n" for sr in analysis.sections if sr.get("summary"))
+        if overview_input.strip():
             try:
-                overview = generate_summary(classify_input[:5000])
+                overview = generate_summary(overview_input[:5000])
             except Exception as e:
                 logger.warning(f"  全文概述生成失败: {e}")
-                overview = classify_input[:500]
+                overview = overview_input[:500]
 
         # 构建单个 MD 文件
         vault_rel = compute_vault_rel_path(file_path, source_dir, vault_path)
@@ -567,8 +565,7 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, source_dir, 
         builder.add_tags_section(all_tags).add_footer()
 
         # 写入（镜像 source 目录结构）
-        source_rel = compute_source_relative_path(file_path, source_dir, vault_path) if source_dir else category
-        dest_dir = os.path.join(vault_path, source_rel)
+        dest_dir = os.path.join(vault_path, category)
         os.makedirs(dest_dir, exist_ok=True)
         filename = f"{date_str}-{safe_name}.md"
         dest_path = os.path.join(dest_dir, filename)
@@ -609,13 +606,13 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, source_dir, 
         # 生成全文概述（AI 综合所有章节摘要）
         from scripts.ai_client import generate_summary
         overview = ""
-        classify_input = "".join(sr.get("summary", "") + "\n" for sr in analysis.sections if sr.get("summary"))
-        if classify_input.strip():
+        overview_input = "".join(sr.get("summary", "") + "\n" for sr in analysis.sections if sr.get("summary"))
+        if overview_input.strip():
             try:
-                overview = generate_summary(classify_input[:5000])
+                overview = generate_summary(overview_input[:5000])
             except Exception as e:
                 logger.warning(f"  全文概述生成失败: {e}")
-                overview = classify_input[:500]
+                overview = overview_input[:500]
 
         vault_rel = compute_vault_rel_path(file_path, source_dir, vault_path)
         builder = MarkdownBuilder(fname, date_str)
@@ -631,8 +628,7 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, source_dir, 
 
         builder.add_tags_section(all_tags).add_footer()
 
-        source_rel = compute_source_relative_path(file_path, source_dir, vault_path) if source_dir else category
-        dest_dir = os.path.join(vault_path, source_rel)
+        dest_dir = os.path.join(vault_path, category)
         os.makedirs(dest_dir, exist_ok=True)
         filename = f"{date_str}-{safe_name}.md"
         dest_path = os.path.join(dest_dir, filename)
