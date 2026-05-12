@@ -274,7 +274,7 @@ def collect_all_files(source: str) -> tuple[list[str], list[str]]:
 
 
 def handle_unsupported_file(file_path: str, cfg: dict, vault_path: str, source_dir: str = None) -> dict:
-    """处理不支持的文件格式：创建简单的 MD 文档记录。
+    """处理不支持的文件格式：不创建 MD 文档，仅记录索引。
 
     Args:
         file_path: 源文件路径
@@ -283,55 +283,28 @@ def handle_unsupported_file(file_path: str, cfg: dict, vault_path: str, source_d
         source_dir: 源文件根目录（用于计算镜像路径）
 
     Returns:
-        {"status": "ok", "path": md_path, "category": category}
+        {"status": "ok", "path": None, "category": category, "file_type": ext}
     """
-    from scripts.builder import MarkdownBuilder
-
     fname = os.path.basename(file_path)
-    safe_name = Path(fname).stem.replace(" ", "_")
-    date_str = datetime.now().strftime("%Y-%m-%d")
+    file_ext = Path(fname).suffix.lower()
 
     # 计算镜像源目录的路径
     if source_dir:
         source_rel = compute_source_relative_path(file_path, source_dir, vault_path)
     else:
-        source_rel = ""  # 根目录
-    vault_rel = compute_vault_rel_path(file_path, source_dir or "", vault_path)
+        source_rel = ""
 
-    # 创建简单的 MD 文档
-    dest_dir = os.path.join(vault_path, source_rel)
-    os.makedirs(dest_dir, exist_ok=True)
+    logger.info(f"  [UNSUPPORTED] {fname} (类型: {file_ext})，仅记录索引")
 
-    builder = MarkdownBuilder(fname, date_str)
-    builder.add_frontmatter(source_rel, ["未识别格式"], source_path=file_path, vault_rel_path=vault_rel).add_title()
-    builder.add_paragraph(f"文件格式: {Path(fname).suffix}")
-    builder.add_archive_link(fname, source_rel, file_path)
-    builder.add_footer()
-
-    md_name = f"{date_str}-{safe_name}.md"
-    dest_path = os.path.join(dest_dir, md_name)
-
-    # 处理文件名冲突
-    if os.path.exists(dest_path):
-        base, ext = os.path.splitext(md_name)
-        counter = 1
-        while os.path.exists(dest_path):
-            dest_path = os.path.join(dest_dir, f"{base}_{counter}{ext}")
-            counter += 1
-
-    with open(dest_path, "w", encoding="utf-8") as f:
-        f.write(builder.build())
-
-    logger.info(f"  [UNSUPPORTED] {fname} → {dest_path}")
-
-    # 记录处理状态
-    record_status(vault_path, file_path, "success", dest_path, source_rel)
+    # 记录到 SQLite（用于追踪）
+    record_status(vault_path, file_path, "unsupported", None, source_rel)
 
     return {
         "status": "ok",
-        "path": dest_path,
+        "path": None,
         "category": source_rel,
-        "tags": ["未识别格式"],
+        "file_type": file_ext,
+        "file_name": fname,
     }
 
 
@@ -470,7 +443,7 @@ def _handle_image_file(file_path, cfg, vault_path, source_dir, fname, safe_name)
     builder = MarkdownBuilder(fname, date_str)
     builder.add_frontmatter(source_rel, all_tags, source_path=file_path, vault_rel_path=vault_rel).add_title()
     builder.add_file_summary(desc)
-    builder.add_archive_link(fname, source_rel, file_path)
+    builder.add_archive_link(fname, source_rel, vault_rel)
     builder.add_tags_section(all_tags).add_footer()
 
     md_name = f"{date_str}-{safe_name}.md"
@@ -563,7 +536,7 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, source_dir, 
         builder.add_paragraph("\n".join(outline_sections))
 
         # 添加源文件链接
-        builder.add_archive_link(fname, category, file_path)
+        builder.add_archive_link(fname, category, vault_rel)
 
         builder.add_tags_section(all_tags).add_footer()
 
@@ -627,7 +600,7 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, source_dir, 
         builder.add_paragraph("\n".join(outline_sections))
 
         # 添加源文件链接
-        builder.add_archive_link(fname, category, file_path)
+        builder.add_archive_link(fname, category, vault_rel)
 
         builder.add_tags_section(all_tags).add_footer()
 
@@ -1013,59 +986,101 @@ def update_failed_moc(vault_path: str) -> None:
     logger.info(f"失败文件索引已更新: {moc_fail_path} ({len(failed_entries)} 个)")
 
 
-def update_unsupported_moc(vault_path: str) -> None:
+def update_unsupported_moc(vault_path: str, unsupported_files: list = None) -> None:
     """生成不支持格式文件的 MOC 索引（MOC_unsupported.md）。
 
-    扫描 vault 中所有带有"未识别格式"标签的 MD 文件，
-    使用多级嵌套结构（与 MOC.md 格式相同）。
+    从 unsupported_files 列表（内存）或 SQLite 状态记录中获取不支持的文件。
+    使用多级嵌套结构（与 MOC.md 格式相同），超过 500 个自动分割。
     如果没有不支持格式文件，则删除已有的 MOC_unsupported.md。
+
+    Args:
+        vault_path: Vault 根目录
+        unsupported_files: [(category, file_name, file_type), ...] 可选，内存中的列表
     """
     from pathlib import Path
 
     moc_unsupported_path = os.path.join(vault_path, "MOC_unsupported.md")
+    moc_max_entries = 500  # 与 MOC.md 保持一致
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    # 扫描 vault 中所有 MD 文件，查找"未识别格式"标签
-    unsupported_entries = []  # (category, note_stem, rel_path)
-    for root, _, files in os.walk(vault_path):
-        # 排除特殊目录
-        if "_failed" in root or "_archive" in root:
-            continue
-        for entry in files:
-            if not entry.endswith(".md") or entry.startswith("MOC"):
-                continue
-            fp = os.path.join(root, entry)
+    # 收集不支持的文件: (category, note_stem, file_type)
+    unsupported_entries = []
+
+    if unsupported_files is not None:
+        # 使用内存中的数据
+        for entry in unsupported_files:
+            if isinstance(entry, dict):
+                cat = entry.get("category", "")
+                name = entry.get("file_name", entry.get("path", ""))
+                ftype = entry.get("file_type", "")
+            else:
+                cat, name, ftype = entry[0], entry[1], entry[2] if len(entry) > 2 else ""
+            stem = Path(name).stem.replace(" ", "_")
+            unsupported_entries.append((cat, stem, ftype))
+    else:
+        # 从 SQLite 读取
+        db_path = os.path.join(vault_path, ".notemind_status.db")
+        if os.path.exists(db_path):
             try:
-                with open(fp, "r", encoding="utf-8") as f:
-                    preview = f.read(500)
-                # 检查是否有"未识别格式"标签
-                for line in preview.split("\n"):
-                    if line.startswith("tags:"):
-                        tags_raw = line[len("tags:"):].strip().strip("[]")
-                        tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
-                        if "未识别格式" in tags:
-                            rel_path = os.path.relpath(fp, vault_path).replace(os.sep, "/")
-                            category = os.path.dirname(rel_path).replace(os.sep, "/") if os.sep in rel_path else ""
-                            unsupported_entries.append((category, Path(entry).stem, rel_path))
-                        break
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT original_path, category FROM status WHERE status = 'unsupported'"
+                )
+                for row in cursor.fetchall():
+                    orig_path, category = row
+                    if orig_path:
+                        stem = Path(orig_path).stem.replace(" ", "_")
+                        ftype = Path(orig_path).suffix.lower()
+                        unsupported_entries.append((category, stem, ftype))
+                conn.close()
             except Exception:
                 pass
 
+        # 也扫描旧的 MD 文件（向后兼容）
+        for root, _, files in os.walk(vault_path):
+            if "_failed" in root or "_archive" in root:
+                continue
+            for entry in files:
+                if not entry.endswith(".md") or entry.startswith("MOC"):
+                    continue
+                fp = os.path.join(root, entry)
+                try:
+                    with open(fp, "r", encoding="utf-8") as f:
+                        preview = f.read(500)
+                    for line in preview.split("\n"):
+                        if line.startswith("tags:"):
+                            tags_raw = line[len("tags:"):].strip().strip("[]")
+                            tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
+                            if "未识别格式" in tags:
+                                rel_path = os.path.relpath(fp, vault_path).replace(os.sep, "/")
+                                category = os.path.dirname(rel_path).replace(os.sep, "/") if os.sep in rel_path else ""
+                                # 从 original_path 提取文件类型
+                                ftype = ""
+                                for line2 in preview.split("\n"):
+                                    if line2.startswith("original_path:"):
+                                        ftype = Path(line2.split(":", 1)[1].strip()).suffix.lower()
+                                        break
+                                stem = Path(entry).stem
+                                unsupported_entries.append((category, stem, ftype))
+                            break
+                except Exception:
+                    pass
+
     if not unsupported_entries:
-        # 没有不支持格式文件，清理已有的 MOC_unsupported.md
         if os.path.exists(moc_unsupported_path):
             os.remove(moc_unsupported_path)
             logger.info("无不支持格式文件，已移除 MOC_unsupported.md")
         return
 
-    # 使用多级嵌套结构（复用 MOC.md 的树形逻辑）
-    # 分离空 category 和有 category 的条目
-    root_entries = [(n, r) for c, n, r in unsupported_entries if not c]
-    tree_entries = [(c, n, r) for c, n, r in unsupported_entries if c]
+    # 分离根目录和有分类的条目
+    root_entries = [(n, t) for c, n, t in unsupported_entries if not c]
+    tree_entries = [(c, n, t) for c, n, t in unsupported_entries if c]
 
+    # 构建树形结构（带文件类型）
     def build_tree(entries: list) -> dict:
         tree = {}
-        for category, note_stem, _ in entries:
+        for category, note_stem, file_type in entries:
             if not category:
                 continue
             parts = category.split("/")
@@ -1074,7 +1089,7 @@ def update_unsupported_moc(vault_path: str) -> None:
                 if part not in current:
                     current[part] = {"_notes": [], "_children": {}}
                 if i == len(parts) - 1:
-                    current[part]["_notes"].append(note_stem)
+                    current[part]["_notes"].append((note_stem, file_type))
                 current = current[part]["_children"]
         return tree
 
@@ -1092,34 +1107,123 @@ def update_unsupported_moc(vault_path: str) -> None:
             total = count_notes(node)
             if total > 0:
                 result.append(f"\n{heading} {name} ({total} 篇)\n")
-            for stem in node["_notes"]:
-                result.append(f"- [[{stem}]]\n")
+            for note_stem, file_type in node["_notes"]:
+                type_label = f" `{file_type}`" if file_type else ""
+                result.append(f"- [[{note_stem}]]{type_label}\n")
             if node["_children"] and level < 6:
                 result.extend(render_tree(node["_children"], level + 1))
         return result
 
-    # 生成 MOC_unsupported.md
+    # 根据总数量决定分割策略
+    total = len(unsupported_entries)
+    if total <= moc_max_entries:
+        moc_paths = [moc_unsupported_path]
+        content_parts = [_build_unsupported_moc(root_entries, tree_entries, total, timestamp)]
+    else:
+        num_parts = (total + moc_max_entries - 1) // moc_max_entries
+        moc_paths = []
+        content_parts = []
+        for i in range(num_parts):
+            start = i * moc_max_entries
+            end = min(start + moc_max_entries, total)
+            part_entries = unsupported_entries[start:end]
+            part_root = [(n, t) for c, n, t in part_entries if not c]
+            part_tree = [(c, n, t) for c, n, t in part_entries if c]
+            moc_path_i = os.path.join(vault_path, f"MOC_unsupported_{i+1}.md")
+            moc_paths.append(moc_path_i)
+            content_parts.append(_build_unsupported_moc(
+                part_root, part_tree, total, timestamp,
+                part=i+1, total_parts=num_parts
+            ))
+
+    # 清理旧的 MOC_unsupported 文件
+    preserve_mocs = {"MOC_fail.md"}
+    for old_moc in os.listdir(vault_path):
+        if old_moc.startswith("MOC_unsupported") and old_moc.endswith(".md"):
+            if old_moc in preserve_mocs:
+                continue
+            old_path = os.path.join(vault_path, old_moc)
+            if old_path not in moc_paths:
+                try:
+                    os.remove(old_path)
+                except Exception:
+                    pass
+
+    # 写入文件
+    for moc_path, content_lines in zip(moc_paths, content_parts):
+        with open(moc_path, "w", encoding="utf-8") as f:
+            f.writelines(content_lines)
+
+    if len(moc_paths) == 1:
+        logger.info(f"不支持格式索引已更新: {moc_unsupported_path} ({total} 个文件)")
+    else:
+        logger.info(f"不支持格式索引已更新: {len(moc_paths)} 个文件, 共 {total} 个文件")
+
+
+def _build_unsupported_moc(root_entries, tree_entries, total, timestamp, part=0, total_parts=0):
+    """构建 MOC_unsupported.md 内容。"""
     lines = [
         "# 不支持格式文件\n",
         f"> 自动更新于 {timestamp}\n",
-        f"\n共 {len(unsupported_entries)} 个文件格式不支持。\n",
     ]
+    if total_parts > 1:
+        lines.append(f"\n> 第 {part}/{total_parts} 部分 | 总计 {total} 个文件\n")
+    lines.append(f"\n共 {total} 个文件格式不支持。\n")
 
-    # 先输出根目录文件（不分组）
+    # 输出根目录文件
     if root_entries:
         lines.append(f"\n## 根目录 ({len(root_entries)} 篇)\n")
-        for note_stem, _ in root_entries:
-            lines.append(f"- [[{note_stem}]]\n")
+        for note_stem, file_type in root_entries:
+            type_label = f" `{file_type}`" if file_type else ""
+            lines.append(f"- [[{note_stem}]]{type_label}\n")
 
     # 输出树形结构
-    tree = build_tree(tree_entries)
-    lines.extend(render_tree(tree, level=2))
+    tree = _build_unsupported_tree(tree_entries)
+    lines.extend(_render_unsupported_tree(tree, level=2))
     lines.append(f"\n> 由 NoteMind 自动生成于 {timestamp}\n")
+    return lines
 
-    with open(moc_unsupported_path, "w", encoding="utf-8") as f:
-        f.writelines(lines)
 
-    logger.info(f"不支持格式索引已更新: {moc_unsupported_path} ({len(unsupported_entries)} 个)")
+def _build_unsupported_tree(entries: list) -> dict:
+    """构建不支持文件的嵌套树结构。"""
+    tree = {}
+    for category, note_stem, file_type in entries:
+        if not category:
+            continue
+        parts = category.split("/")
+        current = tree
+        for i, part in enumerate(parts):
+            if part not in current:
+                current[part] = {"_notes": [], "_children": {}}
+            if i == len(parts) - 1:
+                current[part]["_notes"].append((note_stem, file_type))
+            current = current[part]["_children"]
+    return tree
+
+
+def _count_unsupported_notes(node: dict) -> int:
+    """计算不支持文件节点下的总数。"""
+    count = len(node["_notes"])
+    for child in node["_children"].values():
+        count += _count_unsupported_notes(child)
+    return count
+
+
+def _render_unsupported_tree(tree: dict, level: int = 2) -> list[str]:
+    """递归渲染不支持文件树结构。"""
+    result = []
+    heading = "#" * level
+    for name in sorted(tree.keys()):
+        node = tree[name]
+        total = _count_unsupported_notes(node)
+        if total > 0:
+            result.append(f"\n{heading} {name} ({total} 篇)\n")
+        for note_stem, file_type in node["_notes"]:
+            type_label = f" `{file_type}`" if file_type else ""
+            result.append(f"- [[{note_stem}]]{type_label}\n")
+        if node["_children"] and level < 6:
+            result.extend(_render_unsupported_tree(node["_children"], level + 1))
+    return result
 
 
 def align_vault_dirs_to_source(vault_path: str, source_dir: str) -> dict:
@@ -1269,8 +1373,10 @@ def update_existing_docs(vault_path: str, source_dir: str) -> None:
                         shutil.move(md_path, target_path)
                         dir_fixed += 1
                         logger.info(f"  [目录修复] {f}: {os.path.basename(root)} → {correct_category}/")
-                        md_path = target_path
-                    else:
+                        # 写入更新后的内容到新位置
+                        with open(target_path, "w", encoding="utf-8") as fh:
+                            fh.write(content)
+                    elif needs_category_fix:
                         # 只更新 category，目录没变
                         with open(md_path, "w", encoding="utf-8") as fh:
                             fh.write(content)
@@ -1524,6 +1630,8 @@ def main():
     if args.update:
         logger.info("=== 校验修复模式 ===")
         update_existing_docs(vault_path, source)
+        # 增量刷新不支持的文件索引
+        update_unsupported_moc(vault_path)
         logger.info("校验修复完成！")
         return
 
@@ -1543,7 +1651,8 @@ def main():
     stats = {"ok": 0, "failed": 0, "skipped": 0}
     start_time = time.time()
 
-    # 先处理不支持的文件格式：创建链接和简单 MD 文档
+    # 先处理不支持的文件格式：仅记录索引，不创建 MD
+    unsupported_file_records = []  # [(category, file_name, file_type), ...]
     if unsupported_files:
         logger.info("=== 处理不支持的文件格式 ===")
         for i, file_path in enumerate(unsupported_files, 1):
@@ -1553,17 +1662,22 @@ def main():
                 result = handle_unsupported_file(file_path, cfg, vault_path, source)
                 if result["status"] == "ok":
                     stats["ok"] += 1
-        logger.info(f"不支持的格式处理完成: {len(unsupported_files)} 个文件已创建链接")
+                    unsupported_file_records.append((
+                        result.get("category", ""),
+                        result.get("file_name", fname),
+                        result.get("file_type", ""),
+                    ))
+        logger.info(f"不支持的格式处理完成: {len(unsupported_files)} 个文件已记录索引")
         # 统一建立索引（不实时更新）
         if not args.dry_run:
             update_moc(vault_path)
-            update_unsupported_moc(vault_path)
+            update_unsupported_moc(vault_path, unsupported_file_records)
 
     files = parseable_files
     if not files:
         logger.info("所有可解析文件为空，仅处理了不支持的格式")
         update_moc(vault_path)
-        update_unsupported_moc(vault_path)
+        update_unsupported_moc(vault_path, unsupported_file_records)
         update_failed_moc(vault_path)
         return
 
@@ -1668,6 +1782,7 @@ def main():
     try:
         if not args.dry_run:
             update_moc(vault_path)
+            update_unsupported_moc(vault_path, unsupported_file_records)
             update_failed_moc(vault_path)
 
         from scripts.ai_client import get_pool, print_log_analysis, get_perf_stats, reset_perf_stats
