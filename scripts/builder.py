@@ -16,13 +16,15 @@ class MarkdownBuilder:
         self.date_str = date_str or datetime.now().strftime("%Y-%m-%d")
         self.parts = []
 
-    def add_frontmatter(self, category: str, tags: list[str], source_path: str = None) -> "MarkdownBuilder":
+    def add_frontmatter(self, category: str, tags: list[str], source_path: str = None,
+                        vault_rel_path: str = None) -> "MarkdownBuilder":
         """添加 YAML frontmatter。
 
         Args:
             category: 分类
             tags: 标签列表
-            source_path: 原始文件的完整路径（用于溯源，归档后仅存文件名）
+            source_path: 原始文件的完整路径（用于溯源）
+            vault_rel_path: 相对于 vault 的路径（优先使用，用于跨设备可移植）
         """
         self._category = category
         self._tags = tags
@@ -34,8 +36,8 @@ class MarkdownBuilder:
             f"tags: [{tags_str}]",
         ]
         if source_path:
-            # 归档后原文与 MD 同目录，仅存储文件名
-            frontmatter_lines.append(f"original_path: {os.path.basename(source_path)}")
+            path_to_store = vault_rel_path if vault_rel_path else os.path.basename(source_path)
+            frontmatter_lines.append(f"original_path: {path_to_store}")
         self.parts.append("---\n" + "\n".join(frontmatter_lines) + "\n---\n")
         return self
 
@@ -102,19 +104,20 @@ class MarkdownBuilder:
             self.parts.append(f"- 路径：`{source_path}`\n\n")
         return self
 
-    def add_archive_link(self, archive_filename: str, category: str) -> "MarkdownBuilder":
-        """添加归档文件的双链（Obsidian wikilink），指向 _archive 中的文件。
+    def add_archive_link(self, archive_filename: str, category: str, source_path: str = None) -> "MarkdownBuilder":
+        """添加源文件 wikilink（不再归档文件，只记录链接）。
 
         Args:
-            archive_filename: 归档文件名（如 "HarmonyOS+6.0安全技术白皮书.pdf"）
-            category: 多级分类路径（如 "安全/操作系统安全/HarmonyOS"）
+            archive_filename: 源文件名
+            category: 分类路径（用于显示）
+            source_path: 源文件完整路径（可选）
         """
         if not archive_filename:
             return self
-        # 指向 _archive/{category}/文件名
-        archive_link = f"_archive/{category}/{archive_filename}"
-        self.parts.append(f"## 原始文件\n")
-        self.parts.append(f"- 归档：[[{archive_link}|{archive_filename}]]\n\n")
+
+        stem = Path(archive_filename).stem
+        self.parts.append("## 原始文件\n")
+        self.parts.append(f"- 原文：[[{stem}]]\n\n")
         return self
 
     def add_tags_section(self, tags: list[str]) -> "MarkdownBuilder":
