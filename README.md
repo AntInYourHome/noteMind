@@ -8,11 +8,15 @@
 
 ## 项目约束
 
-### 1. Source 目录需要手动分类
+### 1. 需要 Obsidian 查看
+
+NoteMind 输出的是标准 Markdown 文件，但知识图谱的可视化浏览和双链跳转**需要使用 [Obsidian](https://obsidian.md/) 打开 Vault 目录**。Obsidian 免费、跨平台、本地运行。
+
+### 2. Source 目录需要手动分类
 
 NoteMind **不会替你整理源文件**。你需要先把文件按主题放到不同的目录中，工具会镜像这个目录结构到 Vault，分类基于你已整理好的目录路径。
 
-### 2. 离线 VLM 需首次下载模型
+### 3. 离线 VLM 需首次下载模型
 
 图片文件默认通过云端 LLM API 分析。如需完全离线，运行 `python scripts/setup_vlm.py` 下载 ~450MB 模型权重。下载后纯 CPU 推理，无需联网。
 
