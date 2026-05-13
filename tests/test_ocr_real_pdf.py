@@ -8,6 +8,11 @@
 4. 验证分层过滤策略的实际效果
 """
 
+import pytest
+
+pytest.importorskip("rapidocr_onnxruntime")
+pytest.importorskip("fitz")
+
 import time
 import os
 import fitz  # PyMuPDF
