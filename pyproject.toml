@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "notemind"
+dynamic = ["version"]
+description = "Convert documents (PDF, Word, PPT, Excel, images) to Obsidian Vault notes with AI-powered analysis, classification, and cross-linking"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "NoteMind Contributors"}
+]
+keywords = ["obsidian", "markdown", "document-processing", "knowledge-base", "ai", "note-taking"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Text Processing :: Markup",
+    "Topic :: Utilities",
+]
+
+# Core has zero external dependencies — all stdlib
+dependencies = []
+
+[project.optional-dependencies]
+pdf = ["pymupdf"]
+office = ["python-docx", "python-pptx", "openpyxl"]
+markdown = ["mistune"]
+onenote = ["onenote2xml", "lxml"]
+ocr = ["rapidocr_onnxruntime"]
+all = ["pymupdf", "python-docx", "python-pptx", "openpyxl", "mistune", "onenote2xml", "lxml", "rapidocr_onnxruntime"]
+vlm = ["torch", "transformers>=4.40", "Pillow"]
+dev = ["pytest>=7.0", "mypy", "pyright", "build"]
+
+[project.scripts]
+notemind = "notemind.cli.main:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "notemind.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["notemind*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false

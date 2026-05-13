@@ -330,7 +330,10 @@ class TestGetParser(unittest.TestCase):
         self.assertIsNotNone(get_parser("test.md"))
 
     def test_text_parser(self):
-        self.assertIsNotNone(get_parser("test.txt"))
+        self.assertIsNotNone(get_parser("test.csv"))
+
+    def test_unsupported_txt(self):
+        self.assertIsNone(get_parser("test.txt"))
 
     def test_image_returns_special_marker(self):
         self.assertEqual(get_parser("photo.jpg"), "image")

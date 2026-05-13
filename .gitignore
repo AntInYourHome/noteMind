@@ -55,6 +55,20 @@ minimind-v/modelscope_cache/
 # Release 产物（本地生成，不纳入 git）
 release/
 
+# 分析/知识产物
+llm_wiki/
+llm_wiki_analysis/
+knowledge-base/
+.notemind_assets/
+
+# 测试报告/图片
+tests/MINIMIND_TEST_REPORT.md
+tests/test_image.png
+
+# minimind-v 运行时缓存
+minimind-v/model/siglip2-*/.msc
+minimind-v/model/siglip2-*/.mv
+
 # IDE
 .vscode/
 .idea/

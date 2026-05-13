@@ -1,18 +1,37 @@
-# NoteMind — 零外部依赖（纯 Python 标准库）
-# 所有核心功能仅需 Python 3.10+
+# NoteMind — Dependencies
+# Core functionality requires NO external packages (Python 3.10+ stdlib only).
+# Install optional groups as needed:
 
-# 可选依赖：按需安装
-# pip install pymupdf         # PDF 解析
-# pip install python-docx     # Word 解析
-# pip install python-pptx     # PPT 解析
-# pip install openpyxl        # Excel 解析
-# pip install mistune         # Markdown 格式清洗
-# pip install onenote2xml     # OneNote 解析
-# pip install rapidocr_onnxruntime  # 本地 OCR（图片文字提取）
+# Format parsers:
+#   pip install "notemind[pdf]"        # PDF support
+#   pip install "notemind[office]"     # Word, PPT, Excel support
+#   pip install "notemind[all]"        # All format parsers
 
-# --- VLM 本地图片描述（MiniMind-V） ---
-# 启用本地 AI 图片描述，~3s/张，CPU 可用，无需联网
-# 先安装模型: python scripts/setup_vlm.py
-# pip install torch --index-url https://download.pytorch.org/whl/cpu  # Linux CPU
-# pip install transformers>=4.40  # 模型加载
-# pip install Pillow               # 图像处理
+# Local VLM (AI image description, CPU-only):
+#   pip install "notemind[vlm]"
+
+# ─── Format Support ───
+# PDF
+pymupdf
+
+# Office documents
+python-docx
+python-pptx
+openpyxl
+
+# Markdown cleaning
+mistune
+
+# OneNote
+onenote2xml
+lxml
+
+# Local OCR (fallback when document text is insufficient)
+rapidocr_onnxruntime
+
+# ─── Local VLM (MiniMind-V) — Optional ───
+# Model weights (~277MB) must be downloaded separately:
+#   notemind vlm-install        (after pip install notemind[vlm])
+# torch>=2.0
+# transformers>=4.40
+# Pillow
