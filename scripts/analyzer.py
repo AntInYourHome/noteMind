@@ -45,24 +45,35 @@ class AnalysisResult:
 
 
 def _describe_image(img_path: str, ocr_text: str = "") -> str:
-    """图片描述：OCR 先行，文字不足时调用 MiniMind-V 本地模型。
+    """图片描述：OCR + VLM 组合。
 
     策略：
-      1. OCR 提取了 >20 字 → 直接用（快速、精确）
-      2. OCR 无结果或文字太少 → 调用 MiniMind-V 场景描述（~3s）
+      1. 先尝试 OCR 提取文字（精确）
+      2. 调用 VLM 获取语义理解（图表/截图/场景）
+      3. 组合两者：OCR 文字 + VLM 语义标签
     """
-    if ocr_text and len(ocr_text.strip()) > 20:
-        return ocr_text.strip()
+    parts = []
 
-    # OCR 文字不足，调用本地 VLM
+    # 步骤 1: OCR 文字
+    if ocr_text and ocr_text.strip():
+        parts.append(ocr_text.strip())
+
+    # 步骤 2: VLM 语义理解
     try:
         from scripts.ai_client import analyze_image
-        return analyze_image(img_path)
-    except (ValueError, Exception) as e:
-        # VLM 不可用：回退到 OCR 或跳过
-        if ocr_text and ocr_text.strip():
-            return ocr_text.strip()
-        raise ValueError(f"图片描述失败: {e}")
+        vlm_desc = analyze_image(img_path)
+        if vlm_desc and vlm_desc.strip():
+            parts.append(vlm_desc.strip())
+    except (ValueError, Exception):
+        # VLM 不可用：如果已有 OCR 则跳过
+        if parts:
+            return parts[0]
+        raise ValueError(f"图片描述失败：VLM 不可用且无 OCR 文字")
+
+    # 步骤 3: 组合
+    if len(parts) == 1:
+        return parts[0]
+    return "\n\n".join(parts)
 
 
 class ShortDocStrategy:
@@ -138,10 +149,18 @@ class LongDocStrategy:
         total_chunks = len(chunks)
         logger.info(f"  [合并] {total_sections} 章合并为 {total_chunks} 组（每组 {chunk_size} 章）")
 
+        # 预计算图片的 OCR+VLM 组合描述，混入章节文本
+        image_context = self._build_image_context(images, image_ocr_texts)
+
         for i, chunk in enumerate(chunks):
+            # 将图片上下文混入 chunk 文本，让 LLM 摘要时能感知图片内容
+            enriched_text = chunk["combined_text"]
+            if image_context:
+                enriched_text = f"{chunk['combined_text']}\n\n[文档图片]\n{image_context}"
+
             logger.info(f"  AI 分析组 [{i+1}/{total_chunks}] (含 {len(chunk['sections'])} 章)")
             try:
-                summary = generate_summary(chunk["combined_text"])
+                summary = generate_summary(enriched_text)
             except Exception as e:
                 logger.error(f"  [FAIL] 分析组 {i+1} 失败: {e}")
                 summary = f"（分析失败: {e}）"
@@ -215,8 +234,22 @@ class LongDocStrategy:
     def _analyze_concurrent(self, sections, images, max_workers: int = 5, result=None, callback=None,
                             image_ocr_texts=None):
         """并发分析：逐章完成即回调。"""
-        section_texts = [(i, s.text) for i, s in enumerate(sections) if s.text.strip()]
         total_sections = len(sections)
+
+        # 预计算图片上下文（OCR+VLM 组合）
+        image_context = self._build_image_context(images, image_ocr_texts)
+
+        # 并发处理图片描述
+        for i, img_path in enumerate(images):
+            ocr_text = ""
+            if image_ocr_texts and i < len(image_ocr_texts):
+                ocr_text = image_ocr_texts[i]
+            try:
+                result.image_descriptions.append(_describe_image(img_path, ocr_text))
+            except (ValueError, Exception) as e:
+                logger.debug(f"  [图片] 跳过: {e}")
+
+        section_texts = [(i, s.text) for i, s in enumerate(sections) if s.text.strip()]
 
         if not section_texts:
             for section in sections:
@@ -226,10 +259,14 @@ class LongDocStrategy:
         # 只构建摘要任务（标签最后从全文生成）
         tasks = []
         for idx, text in section_texts:
+            # 将图片上下文混入章节文本，让 LLM 摘要时能感知图片内容
+            enriched_text = f"{text[:5000]}"
+            if image_context:
+                enriched_text = f"{text[:4500]}\n\n[文档图片]\n{image_context}"
             tasks.append({
                 "messages": [{
                     "role": "user",
-                    "content": f"请用中文总结以下内容，提取核心要点（3-5 条），控制在 300 字以内：\n\n{text[:5000]}"
+                    "content": f"请用中文总结以下内容，提取核心要点（3-5 条），控制在 300 字以内：\n\n{enriched_text}"
                 }],
                 "max_tokens": 500,
                 "section_index": idx,
@@ -237,18 +274,7 @@ class LongDocStrategy:
                 "text": text,
             })
 
-        # 图片任务（OCR 先行，VLM 补充，在 _describe_image 中统一处理）
-        for i, img_path in enumerate(images):
-            ocr_text = ""
-            if image_ocr_texts and i < len(image_ocr_texts):
-                ocr_text = image_ocr_texts[i]
-            tasks.append({
-                "task_type": "image",
-                "img_path": img_path,
-                "ocr_text": ocr_text,
-            })
-
-        # 并发执行
+        # 并发执行（只有摘要任务，图片已串行处理）
         pool_size = max_workers
         results_map = {}  # section_index -> {"summary": ...}
         pending = {}
@@ -256,15 +282,9 @@ class LongDocStrategy:
         def run_summary(task):
             return task, generate_summary(task["text"])
 
-        def run_image(task):
-            return task, _describe_image(task["img_path"], task.get("ocr_text", ""))
-
         with ThreadPoolExecutor(max_workers=pool_size) as executor:
             for task in tasks:
-                if task["task_type"] == "summary":
-                    future = executor.submit(run_summary, task)
-                else:
-                    future = executor.submit(run_image, task)
+                future = executor.submit(run_summary, task)
                 pending[future] = task
 
             completed_sections = set()
@@ -275,19 +295,12 @@ class LongDocStrategy:
                 except Exception as e:
                     result_value = f"（失败: {e}）"
 
-                if task["task_type"] == "summary":
-                    idx = task["section_index"]
-                    if idx not in results_map:
-                        results_map[idx] = {"summary": ""}
-                    results_map[idx]["summary"] = result_value
-                    self._emit_section(idx, sections, results_map[idx], result, callback)
-                    completed_sections.add(idx)
-
-                else:  # image
-                    if isinstance(result_value, str) and result_value.startswith("（失败"):
-                        logger.debug(f"  [图片] 跳过: {result_value}")
-                    else:
-                        result.image_descriptions.append(result_value)
+                idx = task["section_index"]
+                if idx not in results_map:
+                    results_map[idx] = {"summary": ""}
+                results_map[idx]["summary"] = result_value
+                self._emit_section(idx, sections, results_map[idx], result, callback)
+                completed_sections.add(idx)
 
         for idx, text in section_texts:
             if idx not in completed_sections:
@@ -307,6 +320,24 @@ class LongDocStrategy:
 
         if callback:
             callback(index, len(sections), section_result)
+
+    def _build_image_context(self, images: list[str], image_ocr_texts: list[str] = None) -> str:
+        """构建文档内嵌图片的 OCR+VLM 组合上下文。
+
+        返回所有图片的 OCR+VLM 组合描述，供 LLM 摘要时使用。
+        """
+        contexts = []
+        for i, img_path in enumerate(images):
+            ocr_text = ""
+            if image_ocr_texts and i < len(image_ocr_texts):
+                ocr_text = image_ocr_texts[i]
+            try:
+                desc = _describe_image(img_path, ocr_text)
+                if desc:
+                    contexts.append(f"[图片{i+1}] {desc}")
+            except (ValueError, Exception):
+                pass
+        return "\n\n".join(contexts)
 
 
 class AnalysisContext:
