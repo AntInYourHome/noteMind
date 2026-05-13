@@ -7,6 +7,10 @@ OCR 穿刺验证 v3 — 使用 RapidOCR (轻量 ONNX，无需下载大模型)
 3. 纯图片判断：能否区分"有文字"和"无文字"图片
 """
 
+import pytest
+
+pytest.importorskip("rapidocr_onnxruntime")
+
 import time
 import os
 
