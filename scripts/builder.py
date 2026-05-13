@@ -117,11 +117,13 @@ class MarkdownBuilder:
 
         # 优先使用 original_path（带路径的 wikilink），回退到仅文件名
         if original_path:
-            link_path = Path(original_path).with_suffix("")
+            # 用字符串操作，避免 Path 在 Windows 上输出反斜杠
+            link_path = original_path.rsplit(".", 1)[0] if "." in original_path else original_path
             self.parts.append("## 原始文件\n")
             self.parts.append(f"- 原文：[[{link_path}]]\n\n")
         else:
-            stem = Path(archive_filename).stem
+            # 去掉扩展名，取纯文件名
+            stem = archive_filename.rsplit(".", 1)[0] if "." in archive_filename else archive_filename
             self.parts.append("## 原始文件\n")
             self.parts.append(f"- 原文：[[{stem}]]\n\n")
         return self

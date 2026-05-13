@@ -587,10 +587,7 @@ PARSERS = {
     ".xls": parse_excel,
     ".md": parse_markdown,
     ".markdown": parse_markdown,
-    ".txt": parse_text,
-    ".log": parse_text,
     ".csv": parse_text,
-    ".one": parse_onenote,
 }
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff", ".tif", ".svg"}

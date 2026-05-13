@@ -213,13 +213,22 @@ def close_status_db():
     """关闭数据库连接。"""
     global _status_db_conn
     if _status_db_conn:
-        _status_db_conn.close()
+        try:
+            _status_db_conn.close()
+        except Exception:
+            pass  # 并发场景可能跨线程关闭，忽略
         _status_db_conn = None
 
 
 def reset_status_db():
     """重置数据库连接（用于新 vault）。"""
-    close_status_db()
+    global _status_db_conn
+    try:
+        if _status_db_conn:
+            _status_db_conn.close()
+    except Exception:
+        pass
+    _status_db_conn = None
 
 
 def init_vault(vault_path: str) -> None:
@@ -416,6 +425,20 @@ def _handle_image_file(file_path, cfg, vault_path, source_dir, fname, safe_name)
     """处理纯图片文件：创建 MD 文档记录图片信息，不归档文件。"""
     from scripts.ai_client import analyze_image, generate_tags
     from scripts.builder import MarkdownBuilder
+    from scripts.ingest_cache import compute_sha256, IngestCache
+
+    # 增量缓存检查
+    cache = IngestCache(vault_path)
+    cache_entry = cache.get(file_path)
+    if cache_entry and cache_entry["sha256"] == compute_sha256(file_path):
+        logger.info(f"  [CACHE HIT] {fname} — 跳过图片处理")
+        return {
+            "status": "ok",
+            "path": cache_entry["output_files"][0] if cache_entry["output_files"] else "",
+            "category": cache_entry.get("category", ""),
+            "tags": cache_entry.get("tags", []),
+            "summary": "",
+        }
 
     # 1. 分析图片
     try:
@@ -454,6 +477,10 @@ def _handle_image_file(file_path, cfg, vault_path, source_dir, fname, safe_name)
     # 记录处理状态
     record_status(vault_path, file_path, "success", dest_path, source_rel)
 
+    # 写入增量缓存
+    cache.put(file_path, compute_sha256(file_path), [dest_path],
+              source_rel, all_tags)
+
     return {
         "status": "ok",
         "path": dest_path,
@@ -485,10 +512,17 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, source_dir, 
         date_str = datetime.now().strftime("%Y-%m-%d")
         safe_name = Path(fname).stem.replace(" ", "_")
 
-        # AI 分析
+        # ── 两步思维链：第一步分析文档结构 ──────────────────────
+        from scripts.ingest_analyzer import analyze_document_structure, build_analysis_context_for_summary
+        doc_structure = analyze_document_structure(parse_result.text)
+        enhanced_text = build_analysis_context_for_summary(doc_structure, parse_result.text)
+        logger.info(f"  [两步分析] 文档类型: {doc_structure['doc_type']}, "
+                     f"实体: {len(doc_structure['entities'])}, 概念: {len(doc_structure['concepts'])}")
+
+        # AI 分析（使用增强后的文本作为输入）
         chunk_size = cfg.get("performance", {}).get("chunk_size", 5)
         analysis = AnalysisContext().analyze(
-            parse_result.text, parse_result.images, parse_result.sections,
+            enhanced_text, parse_result.images, parse_result.sections,
             max_workers=5, callback=None, chunk_size=chunk_size,
             image_ocr_texts=parse_result.image_ocr_texts
         )
@@ -551,8 +585,15 @@ def _handle_document_file(parse_result, file_path, cfg, vault_path, source_dir, 
 
     else:
         # 短文档：同样只生成大纲 + 概述
+        # ── 两步思维链：第一步分析文档结构 ──────────────────────
+        from scripts.ingest_analyzer import analyze_document_structure, build_analysis_context_for_summary
+        doc_structure = analyze_document_structure(parse_result.text)
+        enhanced_text = build_analysis_context_for_summary(doc_structure, parse_result.text)
+        logger.info(f"  [两步分析] 文档类型: {doc_structure['doc_type']}, "
+                     f"实体: {len(doc_structure['entities'])}, 概念: {len(doc_structure['concepts'])}")
+
         analysis = AnalysisContext().analyze(
-            parse_result.text, parse_result.images, parse_result.sections, max_workers=5,
+            enhanced_text, parse_result.images, parse_result.sections, max_workers=5,
             image_ocr_texts=parse_result.image_ocr_texts
         )
         logger.info(f"  AI 分析完成 (并发模式)")
@@ -739,11 +780,15 @@ def update_moc(vault_path: str, max_tags_per_note: int = 3, moc_max_entries: int
                                                part=i+1, total_parts=num_parts))
 
     # 清理旧的 MOC 文件（可能是不需要的分割文件）
-    # 保留 MOC_unsupported.md 和 MOC_fail.md
-    preserve_mocs = {"MOC_unsupported.md", "MOC_fail.md"}
+    # 保留 MOC_unsupported*.md 和 MOC_fail*.md（精确匹配 + 前缀匹配）
+    def is_preserved_moc(name: str) -> bool:
+        return name in ("MOC_unsupported.md", "MOC_fail.md") or \
+               name.startswith("MOC_unsupported_") or \
+               name.startswith("MOC_fail_")
+
     for old_moc in os.listdir(vault_path):
         if old_moc.startswith("MOC") and old_moc.endswith(".md"):
-            if old_moc in preserve_mocs:
+            if is_preserved_moc(old_moc):
                 continue
             old_path = os.path.join(vault_path, old_moc)
             if old_path not in moc_paths:
@@ -1068,7 +1113,9 @@ def update_unsupported_moc(vault_path: str, unsupported_files: list = None) -> N
                     pass
 
     if not unsupported_entries:
-        if os.path.exists(moc_unsupported_path):
+        # 只有调用方明确传入空列表（表示已处理完所有文件且无不支持项）时才删除
+        # 如果 unsupported_files 为 None（回退模式），说明是独立调用，不删除
+        if unsupported_files is not None and os.path.exists(moc_unsupported_path):
             os.remove(moc_unsupported_path)
             logger.info("无不支持格式文件，已移除 MOC_unsupported.md")
         return
@@ -1108,8 +1155,8 @@ def update_unsupported_moc(vault_path: str, unsupported_files: list = None) -> N
             if total > 0:
                 result.append(f"\n{heading} {name} ({total} 篇)\n")
             for note_stem, file_type in node["_notes"]:
-                type_label = f" `{file_type}`" if file_type else ""
-                result.append(f"- [[{note_stem}]]{type_label}\n")
+                link = f"{note_stem}{file_type}" if file_type else note_stem
+                result.append(f"- [[{link}]]\n")
             if node["_children"] and level < 6:
                 result.extend(render_tree(node["_children"], level + 1))
         return result
@@ -1174,8 +1221,8 @@ def _build_unsupported_moc(root_entries, tree_entries, total, timestamp, part=0,
     if root_entries:
         lines.append(f"\n## 根目录 ({len(root_entries)} 篇)\n")
         for note_stem, file_type in root_entries:
-            type_label = f" `{file_type}`" if file_type else ""
-            lines.append(f"- [[{note_stem}]]{type_label}\n")
+            link = f"{note_stem}{file_type}" if file_type else note_stem
+            lines.append(f"- [[{link}]]\n")
 
     # 输出树形结构
     tree = _build_unsupported_tree(tree_entries)
@@ -1219,8 +1266,8 @@ def _render_unsupported_tree(tree: dict, level: int = 2) -> list[str]:
         if total > 0:
             result.append(f"\n{heading} {name} ({total} 篇)\n")
         for note_stem, file_type in node["_notes"]:
-            type_label = f" `{file_type}`" if file_type else ""
-            result.append(f"- [[{note_stem}]]{type_label}\n")
+            link = f"{note_stem}{file_type}" if file_type else note_stem
+            result.append(f"- [[{link}]]\n")
         if node["_children"] and level < 6:
             result.extend(_render_unsupported_tree(node["_children"], level + 1))
     return result
@@ -1542,15 +1589,90 @@ def migrate_existing_docs(vault_path: str, source_dir: str) -> None:
         logger.warning(f"双链重建失败: {e}")
 
 
+def _verify_output_source_alignment(vault_path: str, source_dir: str) -> None:
+    """校验 vault 输出的 MD 文件是否与 source 源文件一一对应。
+
+    检查项：
+    1. 每个 MD 的 original_path 是否在 source 中存在对应源文件
+    2. 按分类统计 MD 文件数
+    """
+    # 1. 扫描 vault 中所有 MD，建立 {original_path: (md_path, category)} 映射
+    md_map = {}
+    for root, _, files in os.walk(vault_path):
+        if "_failed" in root or "_archive" in root:
+            continue
+        for f in files:
+            if not f.endswith(".md") or f.startswith("MOC"):
+                continue
+            fp = os.path.join(root, f)
+            try:
+                with open(fp, "r", encoding="utf-8") as fh:
+                    preview = fh.read(300)
+                orig = ""
+                category = ""
+                for line in preview.split("\n"):
+                    if line.startswith("original_path:"):
+                        orig = line[len("original_path:"):].strip()
+                    elif line.startswith("category:"):
+                        category = line[len("category:"):].strip()
+                if orig:
+                    md_map[orig] = (fp, category)
+            except Exception:
+                pass
+
+    # 2. 扫描 source 文件
+    source_files = set()
+    for root, _, files in os.walk(source_dir):
+        for f in files:
+            full = os.path.join(root, f)
+            rel = os.path.relpath(full, source_dir).replace(os.sep, "/")
+            source_files.add(rel)
+
+    # 3. 检查 MD 的源文件是否存在
+    orphan_md = []
+    for orig_path, (md_path, _) in md_map.items():
+        if orig_path.startswith("source/"):
+            src_rel = orig_path[len("source/"):]
+        else:
+            src_rel = orig_path
+        if src_rel not in source_files:
+            orphan_md.append((os.path.basename(md_path), src_rel))
+
+    if orphan_md:
+        logger.warning(f"  ⚠ {len(orphan_md)} 个 MD 文件在 source 中无对应源文件:")
+        for name, src_rel in orphan_md[:10]:
+            logger.warning(f"    {name} → {src_rel}")
+        if len(orphan_md) > 10:
+            logger.warning(f"    ... 还有 {len(orphan_md) - 10} 个")
+    else:
+        logger.info("  ✅ 所有 MD 文件在 source 中都有对应源文件")
+
+    # 4. 按分类统计
+    category_md = {}
+    for orig_path, (md_path, category) in md_map.items():
+        cat = category or "(根目录)"
+        category_md[cat] = category_md.get(cat, 0) + 1
+
+    if category_md:
+        logger.info("  📊 分类统计:")
+        for cat, count in sorted(category_md.items()):
+            logger.info(f"    {cat}: {count} 篇")
+
+
 def main():
     parser = argparse.ArgumentParser(description="NoteMind — 导入文件到 Obsidian Vault")
-    parser.add_argument("--source", required=True, help="源文件目录路径")
+    parser.add_argument("--source", default=None, help="源文件目录路径（默认 <vault>/myfiles）")
     parser.add_argument("--vault", help="Vault 目录路径（覆盖 config.json）")
     parser.add_argument("--dry-run", action="store_true", help="预览模式，不实际写入文件")
     parser.add_argument("--resume", action="store_true", help="从上次中断的检查点恢复")
     parser.add_argument("--migrate", action="store_true", help="快速迁移已有文档到新格式（更新 MOC/链接/路径，不重新导入）")
     parser.add_argument("--update", action="store_true", help="校验并修复已有 MD 文件的分类、目录映射、MOC（基于 source 路径重新归类）")
     parser.add_argument("--config", help="配置文件路径（默认 config.json）")
+    parser.add_argument("--queue", action="store_true", help="使用持久化队列模式（支持崩溃恢复和 --resume）")
+    parser.add_argument("--lint", action="store_true", help="运行 Wiki 健康检查（孤立页、断链、重复）")
+    parser.add_argument("--delete", help="删除指定源文件并级联清理关联 Wiki 页面")
+    parser.add_argument("--dedup", action="store_true", help="检测并合并重复的 Wiki 页面")
+    parser.add_argument("--dedup-merge", action="store_true", help="检测并自动合并重复的 Wiki 页面（不提示）")
     args = parser.parse_args()
 
     cfg = load_config(args.vault, args.config)
@@ -1609,7 +1731,11 @@ def main():
     else:
         logger.warning("未配置 providers，使用单 API Key（环境变量）")
 
-    source = os.path.realpath(args.source)
+    # 默认 source：vault 下的 myfiles 目录
+    if args.source is None:
+        source = os.path.realpath(os.path.join(vault_path, "myfiles"))
+    else:
+        source = os.path.realpath(args.source)
     if not os.path.isdir(source):
         logger.error(f"源目录不存在: {args.source}")
         sys.exit(1)
@@ -1632,8 +1758,33 @@ def main():
         update_existing_docs(vault_path, source)
         # 增量刷新不支持的文件索引
         update_unsupported_moc(vault_path)
+
+        # 输出文件与 source 对应关系校验
+        _verify_output_source_alignment(vault_path, source)
+
         logger.info("校验修复完成！")
         return
+
+    # --lint 模式：Wiki 健康检查
+    if args.lint:
+        logger.info("=== Wiki 健康检查 ===")
+        from scripts.lint import run_lint, print_lint_report
+        results = run_lint(vault_path)
+        print_lint_report(results)
+        return
+
+    # --delete 模式：级联删除
+    if args.delete:
+        delete_path = os.path.realpath(args.delete)
+        if not os.path.exists(delete_path):
+            logger.error(f"源文件不存在: {delete_path}")
+            sys.exit(1)
+        logger.info(f"=== 级联删除: {delete_path} ===")
+        from scripts.cascade_delete import cascade_delete, print_cascade_report
+        stats = cascade_delete(vault_path, delete_path, dry_run=args.dry_run)
+        print_cascade_report(stats)
+        return
+
 
     init_vault(vault_path)
     logger.info(f"Vault 路径: {vault_path}")
@@ -1671,9 +1822,101 @@ def main():
         # 统一建立索引（不实时更新）
         if not args.dry_run:
             update_moc(vault_path)
-            update_unsupported_moc(vault_path, unsupported_file_records)
+            update_unsupported_moc(vault_path)
 
     files = parseable_files
+
+    # 收集已处理文档元数据（用于双链）— 必须在队列/正常模式之前初始化
+    processed_docs = []
+
+    # ── 队列模式 ────────────────────────────────────────────────
+    if args.queue or args.resume:
+        if not files:
+            logger.info("所有可解析文件为空，仅处理了不支持的格式")
+            update_moc(vault_path)
+            update_unsupported_moc(vault_path)
+            update_failed_moc(vault_path)
+            return
+
+        from scripts.ingest_queue import IngestQueue
+        from scripts.ingest_cache import IngestCache
+        queue = IngestQueue(vault_path)
+        cache = IngestCache(vault_path)
+
+        if args.resume:
+            # 恢复模式：重置失败任务为 pending
+            retried = queue.retry_failed()
+            logger.info(f"=== 队列恢复模式 === 重置 {retried} 个失败任务")
+
+        # 将新文件入队
+        new_count = queue.enqueue_batch(files)
+        logger.info(f"队列: {new_count} 个新文件入队, {queue.summary()}")
+
+        if args.dry_run:
+            logger.info(f"  [DRY-RUN] 队列中有 {queue.summary()['pending']} 个待处理任务")
+            return
+
+        # 串行处理队列
+        import signal
+        interrupted = False
+
+        def _sigint_handler(sig, frame):
+            nonlocal interrupted
+            logger.info("\n收到中断信号，保存队列状态...")
+            interrupted = True
+
+        signal.signal(signal.SIGINT, _sigint_handler)
+
+        logger.info("=== 队列处理开始 ===")
+        while not interrupted:
+            task = queue.get_next_pending()
+            if task is None:
+                break
+
+            queue.mark_processing(task.id)
+            fname = os.path.basename(task.path)
+            summary = queue.summary()
+            logger.info(f"[{summary['done'] + 1}/{queue.summary()['total']}] 处理: {fname} (任务 {task.id})")
+
+            result = handle_file(task.path, cfg, vault_path, source)
+
+            if result["status"] == "ok":
+                logger.info(f"  [OK] {fname} → {result['path']}")
+                logger.info(f"  分类: {result['category']} | 标签: {result['tags']}")
+                stats["ok"] += 1
+                processed_docs.append({
+                    "name": Path(result["path"]).stem,
+                    "path": result["path"],
+                    "tags": result["tags"],
+                    "category": result["category"],
+                    "summary": result.get("summary", ""),
+                })
+                # 写入增量缓存
+                from scripts.ingest_cache import compute_sha256
+                cache.put(task.path, compute_sha256(task.path), [result["path"]],
+                          result.get("category", ""), result.get("tags", []))
+                queue.mark_done(task.id)
+                update_moc(vault_path)
+            else:
+                record_status(vault_path, task.path, "failed", None, None, result["error"])
+                logger.error(f"  [FAIL] {fname}: {result['error']}")
+                stats["failed"] += 1
+                if not args.dry_run:
+                    _create_failed_record(vault_path, task.path, result.get("error", "未知错误"), source)
+                    update_failed_moc(vault_path)
+                queue.mark_failed(task.id)
+
+        if interrupted:
+            logger.info("处理被中断，队列状态已保存。使用 --resume 继续。")
+        else:
+            logger.info(f"队列处理完成: {queue.summary()}")
+            queue.clear_completed()
+
+        # 队列模式后续处理（双链、统计等）与正常模式相同，跳到后面
+        goto_post_processing = True
+    else:
+        goto_post_processing = False
+
     if not files:
         logger.info("所有可解析文件为空，仅处理了不支持的格式")
         update_moc(vault_path)
@@ -1714,51 +1957,79 @@ def main():
             logger.info("所有文件均为重复文件，无需处理")
             return
 
-    logger.info(f"找到 {len(files)} 个新文件待处理")
+    # ── 正常模式（非队列）文件处理 ──────────────────────────────
+    if not goto_post_processing:
+        logger.info(f"找到 {len(files)} 个新文件待处理")
 
-    # 收集已处理文档元数据（用于双链）
-    processed_docs = []
+        # ── SHA256 增量缓存初始化 ─────────────────────────────────
+        from scripts.ingest_cache import IngestCache, check_cache_hit
+        cache = IngestCache(vault_path)
+        cache_stats = cache.stats()
+        logger.info(f"增量缓存: {cache_stats['total']} 个条目 ({cache_stats['cache_size_bytes']} bytes)")
 
-    for i, file_path in enumerate(files, 1):
-        fname = os.path.basename(file_path)
-        logger.info(f"[{i}/{len(files)}] 处理: {fname}")
+        for i, file_path in enumerate(files, 1):
+            fname = os.path.basename(file_path)
+            logger.info(f"[{i}/{len(files)}] 处理: {fname}")
 
-        if args.dry_run:
-            logger.info(f"  [DRY-RUN] 将处理: {fname}")
-            stats["skipped"] += 1
-            continue
+            if args.dry_run:
+                logger.info(f"  [DRY-RUN] 将处理: {fname}")
+                stats["skipped"] += 1
+                continue
 
-        result = handle_file(file_path, cfg, vault_path, source)
+            # 增量缓存检查：内容未变更则跳过
+            cache_entry = check_cache_hit(cache, file_path)
+            if cache_entry is not None:
+                stats["skipped"] += 1
+                # 缓存命中时仍记录状态和文档元数据（用于后续双链/MOC）
+                processed_docs.append({
+                    "name": Path(cache_entry["output_files"][0]).stem if cache_entry["output_files"] else fname,
+                    "path": cache_entry["output_files"][0] if cache_entry["output_files"] else "",
+                    "tags": cache_entry.get("tags", []),
+                    "category": cache_entry.get("category", ""),
+                    "summary": "",
+                    "_cache_hit": True,
+                })
+                continue
 
-        if result["status"] == "ok":
-            logger.info(f"  [OK] {fname} → {result['path']}")
-            logger.info(f"  分类: {result['category']} | 标签: {result['tags']}")
-            stats["ok"] += 1
-            processed_docs.append({
-                "name": Path(result["path"]).stem,
-                "path": result["path"],
-                "tags": result["tags"],
-                "category": result["category"],
-                "summary": result.get("summary", ""),
-            })
-            # 实时更新 MOC（每处理完一个文件）
-            if not args.dry_run:
-                update_moc(vault_path)
+            result = handle_file(file_path, cfg, vault_path, source)
 
-        else:
-            record_status(vault_path, file_path, "failed", None, None, result["error"])
-            logger.error(f"  [FAIL] {fname}: {result['error']}")
-            stats["failed"] += 1
-            # 为失败文件创建 MD 记录到 _failed 目录
-            if not args.dry_run:
-                _create_failed_record(vault_path, file_path, result.get("error", "未知错误"), source)
-                update_failed_moc(vault_path)  # 实时更新失败文件索引
+            if result["status"] == "ok":
+                logger.info(f"  [OK] {fname} → {result['path']}")
+                logger.info(f"  分类: {result['category']} | 标签: {result['tags']}")
+                stats["ok"] += 1
+                processed_docs.append({
+                    "name": Path(result["path"]).stem,
+                    "path": result["path"],
+                    "tags": result["tags"],
+                    "category": result["category"],
+                    "summary": result.get("summary", ""),
+                })
+                # 写入增量缓存
+                from scripts.ingest_cache import compute_sha256
+                cache.put(file_path, compute_sha256(file_path), [result["path"]],
+                          result.get("category", ""), result.get("tags", []))
+                # 实时更新 MOC（每处理完一个文件）
+                if not args.dry_run:
+                    update_moc(vault_path)
 
-        # 进度日志（每 10 个文件打印一次）
-        processed_count += 1
-        if processed_count % 10 == 0:
-            elapsed = round(time.time() - start_time, 1)
-            logger.info(f"[进度] {processed_count}/{len(files)} | 成功: {stats['ok']} | 失败: {stats['failed']} | 耗时: {elapsed}s")
+            else:
+                record_status(vault_path, file_path, "failed", None, None, result["error"])
+                logger.error(f"  [FAIL] {fname}: {result['error']}")
+                stats["failed"] += 1
+                # 为失败文件创建 MD 记录到 _failed 目录
+                if not args.dry_run:
+                    _create_failed_record(vault_path, file_path, result.get("error", "未知错误"), source)
+                    update_failed_moc(vault_path)  # 实时更新失败文件索引
+
+            # 进度日志（每 10 个文件打印一次）
+            processed_count += 1
+            if processed_count % 10 == 0:
+                elapsed = round(time.time() - start_time, 1)
+                logger.info(f"[进度] {processed_count}/{len(files)} | 成功: {stats['ok']} | 失败: {stats['failed']} | 耗时: {elapsed}s")
+
+    else:
+        # 队列模式：缓存已在队列处理中初始化，processed_docs 已在队列循环中填充
+        pass
 
     # 文档双链
     if not args.dry_run and processed_docs:
@@ -1782,7 +2053,10 @@ def main():
     try:
         if not args.dry_run:
             update_moc(vault_path)
-            update_unsupported_moc(vault_path, unsupported_file_records)
+            # 注意：不从主流程末尾调用 update_unsupported_moc，因为它会
+            # 用本次运行的 unsupported_file_records（可能为空）覆盖
+            # 之前积累的不支持文件记录。MOC_unsupported 在处理不支持
+            # 文件的阶段已经更新过了。
             update_failed_moc(vault_path)
 
         from scripts.ai_client import get_pool, print_log_analysis, get_perf_stats, reset_perf_stats
