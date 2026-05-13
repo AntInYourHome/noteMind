@@ -354,6 +354,13 @@ def parse_pptx(file_path: str) -> ParseResult:
         return ParseResult(full_text, all_images, sections, all_image_ocr)
     except ImportError:
         return ParseResult("", [])
+    except PermissionError:
+        raise  # 文件被锁定，向上传播以便跳过重试
+    except OSError as e:
+        # 文件被占用/锁定/无法打开
+        if e.errno in (13, 16, 32):  # Permission denied / Device busy / Sharing violation
+            raise
+        raise
 
 
 def parse_excel(file_path: str) -> ParseResult:

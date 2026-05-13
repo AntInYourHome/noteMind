@@ -251,3 +251,18 @@ def _read_file(path: str) -> Optional[str]:
 def _write_file(path: str, content: str) -> None:
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
+
+
+def print_cascade_report(result: dict) -> None:
+    """打印级联删除报告。"""
+    import logging
+    logger = logging.getLogger("notemind")
+    logger.info(f"  删除页面: {len(result['deleted_pages'])} 个")
+    for p in result["deleted_pages"]:
+        logger.info(f"    - {os.path.basename(p)}")
+    logger.info(f"  更新页面: {len(result['updated_pages'])} 个")
+    for p in result["updated_pages"]:
+        logger.info(f"    - {os.path.basename(p)}")
+    logger.info(f"  清理链接: {len(result['cleaned_links'])} 个")
+    if result.get("error"):
+        logger.warning(f"  错误: {result['error']}")

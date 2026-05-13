@@ -335,6 +335,16 @@ def parse_with_retry(file_path: str, max_retries: int, retry_delay: int):
             if not result.has_content:
                 return None, "文件内容为空"
             return result, ""
+        except PermissionError as e:
+            # 文件被锁定（如 PPT 正在被编辑），不重试
+            logger.warning(f"  [跳过] 文件被占用: {file_path} — 关闭后下次导入可处理")
+            return None, f"文件被占用，跳过（关闭文件后下次导入可处理）"
+        except OSError as e:
+            # 文件锁定/共享冲突，不重试
+            if e.errno in (13, 16, 32):
+                logger.warning(f"  [跳过] 文件被占用: {file_path} — 关闭后下次导入可处理")
+                return None, f"文件被占用，跳过（关闭文件后下次导入可处理）"
+            last_error = f"{type(e).__name__}: {e}"
         except Exception as e:
             last_error = f"{type(e).__name__}: {e}"
             if attempt < max_retries:
@@ -1736,6 +1746,50 @@ def main():
         source = os.path.realpath(os.path.join(vault_path, "myfiles"))
     else:
         source = os.path.realpath(args.source)
+
+    # source 存在性校验：仅导入类模式需要 source
+    if not args.lint and not args.delete and not args.dedup and not args.dedup_merge:
+        if not os.path.isdir(source):
+            logger.error(f"源目录不存在: {args.source}")
+            sys.exit(1)
+
+    # --lint 模式：Wiki 健康检查（不需要 source）
+    if args.lint:
+        logger.info("=== Wiki 健康检查 ===")
+        from scripts.lint import run_lint, print_lint_report
+        results = run_lint(vault_path)
+        print_lint_report(results)
+        return
+
+    # --delete 模式：级联删除
+    if args.delete:
+        delete_path = os.path.realpath(args.delete)
+        if not os.path.exists(delete_path):
+            logger.error(f"源文件不存在: {delete_path}")
+            sys.exit(1)
+        logger.info(f"=== 级联删除: {delete_path} ===")
+        from scripts.cascade_delete import cascade_delete, print_cascade_report
+        stats = cascade_delete(delete_path, vault_path)
+        print_cascade_report(stats)
+        return
+
+    # --dedup 模式：检测重复 Wiki 页面
+    if args.dedup or args.dedup_merge:
+        logger.info("=== 去重检测 ===")
+        from scripts.dedup import find_duplicate_pages, merge_duplicate_pages
+        candidates = find_duplicate_pages(vault_path)
+        if not candidates:
+            logger.info("未发现重复页面")
+            return
+        logger.info(f"发现 {len(candidates)} 组候选重复页面:")
+        for c in candidates:
+            logger.info(f"  {c['name']} ({c['similarity']:.0%}): {', '.join(os.path.basename(p) for p in c['paths'])}")
+        if args.dedup_merge:
+            stats = merge_duplicate_pages(vault_path, candidates, dry_run=args.dry_run)
+            logger.info(f"合并: {stats['merged']} | 删除: {stats['deleted']} | 重写: {stats['rewritten']}")
+        return
+
+    # --source 必须存在（导入类模式）
     if not os.path.isdir(source):
         logger.error(f"源目录不存在: {args.source}")
         sys.exit(1)
@@ -1763,26 +1817,6 @@ def main():
         _verify_output_source_alignment(vault_path, source)
 
         logger.info("校验修复完成！")
-        return
-
-    # --lint 模式：Wiki 健康检查
-    if args.lint:
-        logger.info("=== Wiki 健康检查 ===")
-        from scripts.lint import run_lint, print_lint_report
-        results = run_lint(vault_path)
-        print_lint_report(results)
-        return
-
-    # --delete 模式：级联删除
-    if args.delete:
-        delete_path = os.path.realpath(args.delete)
-        if not os.path.exists(delete_path):
-            logger.error(f"源文件不存在: {delete_path}")
-            sys.exit(1)
-        logger.info(f"=== 级联删除: {delete_path} ===")
-        from scripts.cascade_delete import cascade_delete, print_cascade_report
-        stats = cascade_delete(vault_path, delete_path, dry_run=args.dry_run)
-        print_cascade_report(stats)
         return
 
 
