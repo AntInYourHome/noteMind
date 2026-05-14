@@ -1,7 +1,7 @@
 """
 NoteMind AI 分析策略 — 短文档单摘要 vs 长文档逐章摘要
 标签优化：一篇文档只生成一次标签，从全文生成，不逐章/逐图片生成
-图片描述：OCR 先行，文字不足时调用 MiniMind-V 本地模型补充。
+图片描述：使用 RapidOCR 提取图片中的文字。
 """
 
 import logging
@@ -45,35 +45,25 @@ class AnalysisResult:
 
 
 def _describe_image(img_path: str, ocr_text: str = "") -> str:
-    """图片描述：OCR + VLM 组合。
+    """图片描述：使用 RapidOCR 提取图片中的文字。
 
     策略：
-      1. 先尝试 OCR 提取文字（精确）
-      2. 调用 VLM 获取语义理解（图表/截图/场景）
-      3. 组合两者：OCR 文字 + VLM 语义标签
+      1. 先尝试 OCR 提取文字
+      2. 如果 OCR 无文字，返回空字符串让调用方跳过
     """
-    parts = []
-
-    # 步骤 1: OCR 文字
     if ocr_text and ocr_text.strip():
-        parts.append(ocr_text.strip())
+        return ocr_text.strip()
 
-    # 步骤 2: VLM 语义理解
+    # OCR 无文字时，尝试用 ai_client 再次 OCR
     try:
         from scripts.ai_client import analyze_image
-        vlm_desc = analyze_image(img_path)
-        if vlm_desc and vlm_desc.strip():
-            parts.append(vlm_desc.strip())
+        desc = analyze_image(img_path)
+        if desc and desc.strip():
+            return desc.strip()
     except (ValueError, Exception):
-        # VLM 不可用：如果已有 OCR 则跳过
-        if parts:
-            return parts[0]
-        raise ValueError(f"图片描述失败：VLM 不可用且无 OCR 文字")
+        pass
 
-    # 步骤 3: 组合
-    if len(parts) == 1:
-        return parts[0]
-    return "\n\n".join(parts)
+    return ""
 
 
 class ShortDocStrategy:

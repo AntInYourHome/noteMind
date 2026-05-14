@@ -28,10 +28,3 @@ lxml
 
 # Local OCR (fallback when document text is insufficient)
 rapidocr_onnxruntime
-
-# ─── Local VLM (MiniMind-V) — Optional ───
-# Model weights (~277MB) must be downloaded separately:
-#   notemind vlm-install        (after pip install notemind[vlm])
-# torch>=2.0
-# transformers>=4.40
-# Pillow

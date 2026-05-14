@@ -1,9 +1,9 @@
 """
 图片处理链路验证测试
 
-验证两个核心场景：
-1. 纯图片文件：OCR + VLM 组合 → LLM 生成标签
-2. 文档内嵌图片：OCR + VLM 组合 → 混入章节文本 → LLM 生成摘要
+验证核心场景：
+1. 纯图片文件：OCR 提取文字
+2. 文档内嵌图片：OCR 文字混入章节文本 -> LLM 生成摘要
 """
 
 import os
@@ -29,51 +29,38 @@ from scripts.analyzer import (
 # ── 场景 1: 纯图片文件 ──────────────────────────────────────
 
 class TestDescribeImage:
-    """验证 _describe_image 的 OCR + VLM 组合行为。"""
+    """验证 _describe_image 的 OCR 提取行为。"""
 
-    def test_ocr_only_vlm_fails(self):
-        """当有 OCR 文字但 VLM 不可用时，应返回 OCR 文字。"""
-        with patch('scripts.ai_client.analyze_image') as mock_vlm:
-            mock_vlm.side_effect = ValueError("VLM 不可用")
-            result = _describe_image("/fake/path.jpg", ocr_text="图片中的文字")
-            assert result == "图片中的文字"
+    def test_ocr_text_returned(self):
+        """当有 OCR 文字时，应返回 OCR 文字。"""
+        result = _describe_image("/fake/path.jpg", ocr_text="图片中的文字")
+        assert result == "图片中的文字"
 
-    def test_vlm_only_no_ocr(self):
-        """当无 OCR 文字但 VLM 可用时，应返回 VLM 描述。"""
-        with patch('scripts.ai_client.analyze_image') as mock_vlm:
-            mock_vlm.return_value = "类型：架构图\n主体：三层架构\n文字：无\n场景：系统设计"
+    def test_no_ocr_fallback_to_analyze_image(self):
+        """当无 OCR 文字时，应尝试 analyze_image（RapidOCR）。"""
+        with patch('scripts.ai_client.analyze_image') as mock_ocr:
+            mock_ocr.return_value = "RapidOCR 提取的文字"
             result = _describe_image("/fake/path.jpg", ocr_text="")
-            assert "架构图" in result
-            assert "三层架构" in result
+            assert result == "RapidOCR 提取的文字"
 
-    def test_ocr_and_vlm_combined(self):
-        """当 OCR 和 VLM 都有内容时，应组合输出。"""
-        with patch('scripts.ai_client.analyze_image') as mock_vlm:
-            mock_vlm.return_value = "类型：截图\n主体：错误提示框"
-            result = _describe_image("/fake/path.jpg", ocr_text="Error: Connection refused")
-            # 应包含 OCR 和 VLM 两部分
-            assert "Error: Connection refused" in result
-            assert "截图" in result
-            assert "错误提示框" in result
-
-    def test_neither_ocr_nor_vlm_raises(self):
-        """当 OCR 和 VLM 都无内容时，应抛出异常。"""
-        with patch('scripts.ai_client.analyze_image') as mock_vlm:
-            mock_vlm.side_effect = ValueError("VLM 不可用")
-            with pytest.raises(ValueError, match="VLM 不可用"):
-                _describe_image("/fake/path.jpg", ocr_text="")
+    def test_no_ocr_analyze_image_also_empty(self):
+        """当 OCR 和 analyze_image 都无内容时，应返回空字符串。"""
+        with patch('scripts.ai_client.analyze_image') as mock_ocr:
+            mock_ocr.side_effect = ValueError("无可识别文字")
+            result = _describe_image("/fake/path.jpg", ocr_text="")
+            assert result == ""
 
     def test_empty_ocr_skipped(self):
-        """空 OCR 文字应被跳过。"""
-        with patch('scripts.ai_client.analyze_image') as mock_vlm:
-            mock_vlm.return_value = "类型：照片"
+        """空 OCR 文字应被跳过，走 fallback 路径。"""
+        with patch('scripts.ai_client.analyze_image') as mock_ocr:
+            mock_ocr.return_value = "类型：照片"
             result = _describe_image("/fake/path.jpg", ocr_text="   ")
             assert result == "类型：照片"
 
     def test_whitespace_only_ocr_skipped(self):
         """纯空白 OCR 文字应被跳过。"""
-        with patch('scripts.ai_client.analyze_image') as mock_vlm:
-            mock_vlm.return_value = "类型：图表"
+        with patch('scripts.ai_client.analyze_image') as mock_ocr:
+            mock_ocr.return_value = "类型：图表"
             result = _describe_image("/fake/path.jpg", ocr_text="\n  ")
             assert result == "类型：图表"
 
@@ -84,21 +71,17 @@ class TestImageContextInjection:
     """验证图片上下文混入章节文本的行为。"""
 
     def test_build_image_context_combines_all_images(self):
-        """_build_image_context 应组合所有图片的 OCR+VLM 描述。"""
+        """_build_image_context 应组合所有图片的 OCR 描述。"""
         strategy = LongDocStrategy()
         images = ["/img1.jpg", "/img2.png"]
         ocr_texts = ["OCR 文字 1", "OCR 文字 2"]
 
-        with patch('scripts.ai_client.analyze_image') as mock_vlm:
-            mock_vlm.side_effect = ["VLM 描述 1", "VLM 描述 2"]
-            context = strategy._build_image_context(images, ocr_texts)
+        context = strategy._build_image_context(images, ocr_texts)
 
-            assert "[图片1]" in context
-            assert "[图片2]" in context
-            assert "OCR 文字 1" in context
-            assert "VLM 描述 1" in context
-            assert "OCR 文字 2" in context
-            assert "VLM 描述 2" in context
+        assert "[图片1]" in context
+        assert "[图片2]" in context
+        assert "OCR 文字 1" in context
+        assert "OCR 文字 2" in context
 
     def test_build_image_context_skips_failed_images(self):
         """_build_image_context 应跳过无法描述的图片。"""
@@ -106,14 +89,15 @@ class TestImageContextInjection:
         images = ["/img1.jpg", "/img2.png"]
         ocr_texts = ["OCR 文字 1", ""]
 
-        with patch('scripts.ai_client.analyze_image') as mock_vlm:
-            mock_vlm.side_effect = [ValueError("VLM 失败"), "VLM 描述 2"]
+        # img2 无 OCR 且 analyze_image 也失败
+        with patch('scripts.ai_client.analyze_image') as mock_ocr:
+            mock_ocr.side_effect = [ValueError("OCR 失败"), ValueError("无可识别文字")]
             context = strategy._build_image_context(images, ocr_texts)
 
             # img1 有 OCR，应包含
             assert "OCR 文字 1" in context
-            # img2 有 VLM，应包含
-            assert "VLM 描述 2" in context
+            # img2 无可识别内容，不应出现
+            assert "[图片2]" not in context
 
     def test_chunked_analysis_enriches_text_with_image_context(self):
         """_analyze_chunked 应将图片上下文混入章节文本后调用 LLM。"""
@@ -134,11 +118,8 @@ class TestImageContextInjection:
             captured_summary_input.append(text)
             return "AI 摘要"
 
-        # _describe_image 内部 late import analyze_image，所以 patch ai_client 路径
-        with patch('scripts.ai_client.analyze_image') as mock_vlm, \
-             patch('scripts.analyzer.generate_summary', side_effect=mock_generate_summary), \
+        with patch('scripts.analyzer.generate_summary', side_effect=mock_generate_summary), \
              patch('scripts.analyzer.generate_tags', return_value=[]):
-            mock_vlm.return_value = "VLM 描述"
             strategy._analyze_chunked(sections, images, callback=None, chunk_size=3,
                                       result=result, image_ocr_texts=ocr_texts)
 
@@ -150,7 +131,6 @@ class TestImageContextInjection:
         assert "第 3 页内容" in summary_text
         assert "[文档图片]" in summary_text
         assert "图片 OCR 文字" in summary_text
-        assert "VLM 描述" in summary_text
 
     def test_concurrent_analysis_enriches_text_with_image_context(self):
         """_analyze_concurrent 应将图片上下文混入章节文本后调用 LLM。"""
@@ -165,10 +145,8 @@ class TestImageContextInjection:
 
         result = AnalysisResult()
 
-        with patch('scripts.ai_client.analyze_image') as mock_vlm, \
-             patch('scripts.analyzer.generate_summary', return_value="AI 摘要"), \
+        with patch('scripts.analyzer.generate_summary', return_value="AI 摘要"), \
              patch('scripts.analyzer.generate_tags', return_value=[]):
-            mock_vlm.return_value = "VLM 描述"
             strategy._analyze_concurrent(sections, images, max_workers=2, result=result,
                                          callback=None, image_ocr_texts=ocr_texts)
 
@@ -176,7 +154,6 @@ class TestImageContextInjection:
         assert len(result.image_descriptions) == 1
         desc = result.image_descriptions[0]
         assert "图片 OCR 文字" in desc
-        assert "VLM 描述" in desc
 
         # 验证章节被处理
         assert len(result.sections) == 2
@@ -204,7 +181,7 @@ class TestImageContextInjection:
         assert "[文档图片]" not in captured_summary_input[0]
 
 
-# ── 场景 3: 端到端（mock LLM + VLM）──────────────────────────
+# ── 场景 3: 端到端（mock LLM）────────────────────────────────
 
 class TestEndToEnd:
     """端到端测试：完整分析链路。"""
@@ -243,10 +220,8 @@ class TestEndToEnd:
             captured_inputs.append(text)
             return "摘要"
 
-        with patch('scripts.ai_client.analyze_image') as mock_vlm, \
-             patch('scripts.analyzer.generate_summary', side_effect=mock_generate_summary), \
+        with patch('scripts.analyzer.generate_summary', side_effect=mock_generate_summary), \
              patch('scripts.analyzer.generate_tags', return_value=["标签1", "标签2"]):
-            mock_vlm.side_effect = ["VLM 1", "VLM 2"]
 
             result = ctx.analyze(
                 text="全文",
@@ -275,14 +250,8 @@ class TestEndToEnd:
         ocr_texts = [f"OCR {i}" for i in range(15)]
         sections = []
 
-        vlm_calls = []
-
-        def mock_analyze_image(path):
-            vlm_calls.append(path)
-            return f"VLM for {path}"
-
-        with patch('scripts.analyzer.analyze_image', side_effect=mock_analyze_image), \
-             patch('scripts.analyzer.generate_summary', return_value="摘要"), \
+        # 所有图片都有 OCR 文本，直接返回 OCR
+        with patch('scripts.analyzer.generate_summary', return_value="摘要"), \
              patch('scripts.analyzer.generate_tags', return_value=["标签1"]):
             result = ctx.analyze(
                 text="文本" * 100,  # 触发短文档策略
@@ -293,8 +262,9 @@ class TestEndToEnd:
                 image_ocr_texts=ocr_texts
             )
 
-        # VLM 调用不应超过 MAX_VLM_IMAGES
-        assert len(vlm_calls) <= ctx.MAX_VLM_IMAGES
-
-        # 但 image_descriptions 应包含所有有 OCR 的图片
+        # image_descriptions 应包含所有有 OCR 的图片
         assert len(result.image_descriptions) == 15
+        # 前 MAX_VLM_IMAGES 张通过 _describe_image 处理
+        assert "OCR 0" in result.image_descriptions[0]
+        # 超出部分的图片，直接用 OCR 文本作为描述
+        assert "OCR 10" in result.image_descriptions[10]

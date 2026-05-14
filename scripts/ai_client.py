@@ -837,37 +837,24 @@ def print_image_test_report(results: dict):
 
 
 def analyze_image(image_path: str) -> str:
-    """分析图片内容，返回概要。使用本地 MiniMind-V 模型。
+    """分析图片内容，返回 OCR 提取的文字。
 
-    如果本地 VLM 不可用，抛出 ValueError 让调用方使用 OCR 降级。
+    使用 RapidOCR 进行图片文字识别，返回提取的文本内容。
     """
-    if not _use_local_vlm():
-        raise ValueError("本地 VLM 不可用（未启用或模型文件缺失），跳过图片分析")
-
     try:
-        from scripts.vlm_local import describe_image
-        desc = describe_image(image_path)
-        if desc and desc.strip():
-            return desc.strip()
-    except Exception as e:
-        raise ValueError(f"本地 VLM 推理失败: {e}")
+        from scripts.parsers import _get_ocr_instance
+        ocr = _get_ocr_instance()
+        if ocr is None:
+            raise ValueError("RapidOCR 未安装（pip install rapidocr_onnxruntime）")
 
-
-# --- 本地 VLM 开关 ---
-
-def _use_local_vlm() -> bool:
-    """检查是否启用本地 VLM 推理。"""
-    env_val = os.environ.get("NOTEMIND_LOCAL_VLM", "auto")
-    if env_val == "0" or env_val.lower() == "false":
-        return False
-    if env_val == "1" or env_val.lower() == "true":
-        return True
-    # auto: 检查文件是否存在
-    try:
-        from scripts.vlm_local import is_available
-        return is_available()
+        result, _ = ocr(image_path)
+        if result:
+            text = "\n".join(line[1] for line in result if len(line) >= 2)
+            if text.strip():
+                return text.strip()
+        raise ValueError("图片中未识别到文字")
     except ImportError:
-        return False
+        raise ValueError("RapidOCR 未安装（pip install rapidocr_onnxruntime）")
 
 
 # --- 性能统计全局计数器 ---

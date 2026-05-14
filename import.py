@@ -1683,6 +1683,7 @@ def main():
     parser.add_argument("--delete", help="删除指定源文件并级联清理关联 Wiki 页面")
     parser.add_argument("--dedup", action="store_true", help="检测并合并重复的 Wiki 页面")
     parser.add_argument("--dedup-merge", action="store_true", help="检测并自动合并重复的 Wiki 页面（不提示）")
+    parser.add_argument("--update-image", action="store_true", help="强制重新处理所有图片（清除缓存后重新 OCR）")
     args = parser.parse_args()
 
     cfg = load_config(args.vault, args.config)
@@ -1817,6 +1818,51 @@ def main():
         _verify_output_source_alignment(vault_path, source)
 
         logger.info("校验修复完成！")
+        return
+
+    # --update-image 模式：强制重新处理所有图片
+    if args.update_image:
+        logger.info("=== 图片重新处理模式 ===")
+        from scripts.parsers import IMAGE_EXTS
+        from scripts.ingest_cache import IngestCache, compute_sha256
+
+        cache = IngestCache(vault_path)
+        cache.invalidate_all()  # 清除所有缓存
+
+        img_files = [f for f in collect_files(source)
+                     if Path(f).suffix.lower() in IMAGE_EXTS]
+        logger.info(f"缓存已清除，找到 {len(img_files)} 张图片待处理")
+
+        if not img_files:
+            logger.info("没有找到图片文件")
+            return
+
+        stats = {"ok": 0, "failed": 0}
+        for i, file_path in enumerate(img_files, 1):
+            fname = os.path.basename(file_path)
+            logger.info(f"[{i}/{len(img_files)}] 重新处理图片: {fname}")
+
+            # 检查文件是否被占用
+            try:
+                result = handle_file(file_path, cfg, vault_path, source)
+            except PermissionError:
+                logger.warning(f"  [跳过] 文件被占用: {fname}")
+                stats["failed"] += 1
+                continue
+
+            if result["status"] == "ok":
+                logger.info(f"  [OK] {fname} → {result['path']}")
+                logger.info(f"  分类: {result['category']} | 标签: {result['tags']}")
+                stats["ok"] += 1
+                update_moc(vault_path)
+            else:
+                logger.error(f"  [FAIL] {fname}: {result['error']}")
+                stats["failed"] += 1
+                if not args.dry_run:
+                    _create_failed_record(vault_path, file_path, result.get("error", "未知错误"), source)
+                    update_failed_moc(vault_path)
+
+        logger.info(f"图片重新处理完成: 成功 {stats['ok']}, 失败 {stats['failed']}")
         return
 
 
@@ -1965,12 +2011,6 @@ def main():
         pool = get_pool()
         img_results = test_image_analysis(pool, img_files[0])
         print_image_test_report(img_results)
-
-    # 测试本地 VLM 可用性（MiniMind-V）- 进程启动时验证
-    from scripts.vlm_local import test_local_vlm, print_local_vlm_test_report
-    test_img_path = img_files[0] if img_files else None
-    local_vlm_results = test_local_vlm(test_img_path)
-    print_local_vlm_test_report(local_vlm_results)
 
     processed_count = 0
 
