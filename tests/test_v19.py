@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-NoteMind v1.9.5 专项测试 — SQLite 状态 + 文件更新检测 + 本地 VLM
+NoteMind v1.9.5 专项测试 — SQLite 状态 + 文件更新检测 + RapidOCR 图片处理
 用法：python tests/test_v19.py
 """
 
@@ -180,25 +180,6 @@ def test_unsupported_file_handling():
         cleanup(test_dir)
 
 
-def test_local_vlm_availability():
-    """测试本地 VLM 可用性检测。"""
-    print("\n[V19-06] vlm_local.py — 本地 VLM 可用性")
-    try:
-        from scripts.vlm_local import is_available, test_local_vlm
-
-        # 检查是否可用（不实际加载模型）
-        available = is_available()
-        check("is_available() 返回布尔值", isinstance(available, bool))
-
-        # 测试函数存在
-        results = test_local_vlm(None)
-        check("test_local_vlm() 返回字典", isinstance(results, dict))
-        check("返回包含 available 键", "available" in results)
-
-    except ImportError:
-        check("vlm_local 模块可导入", False, "ImportError")
-
-
 def test_reasoning_content_filtering():
     """测试 reasoning 模型思考过程过滤。"""
     print("\n[V19-07] ai_client.py — reasoning 思考过程过滤")
@@ -278,23 +259,6 @@ def test_moc_split():
 
     finally:
         cleanup(test_dir)
-
-
-def test_vlm_import_error_handling():
-    """测试 VLM 模块导入错误处理。"""
-    print("\n[V19-10] vlm_local.py — VLM 导入错误处理")
-    try:
-        from scripts.vlm_local import is_available
-
-        # is_available 不应抛出异常，即使模块不存在
-        result = is_available()
-        check("is_available() 不抛异常", isinstance(result, bool))
-
-        # 当模型文件不存在时应返回 False
-        if not result:
-            check("模型文件不存在时返回 False", result is False)
-    except Exception as e:
-        check("is_available() 不应抛异常", False, f"抛出: {e}")
 
 
 def test_file_update_with_md5_change():
@@ -411,88 +375,6 @@ def test_failed_record_sqlite():
 
     finally:
         cleanup(test_dir)
-
-
-def test_vlm_model_vlm_py_missing():
-    """测试生产环境 model_vlm.py 缺失时的容错处理。
-
-    生产环境报：[VLM] model_vlm.py 不存在，本地 VLM 不可用。
-    验证 is_available() 在 model_vlm.py 缺失时返回 False 且不抛异常。
-    """
-    print("\n[V19-14] vlm_local.py — model_vlm.py 缺失容错")
-    try:
-        from scripts.vlm_local import is_available
-
-        # 当前环境可能有 model_vlm.py，我们测试 is_available 的行为
-        result = is_available()
-        check("is_available() 返回布尔值", isinstance(result, bool))
-
-        # 验证 is_available 内部检查了 model_vlm.py 的存在性
-        # 如果 model_vlm.py 不存在，应返回 False
-        import os
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        # 测试目录下是 tests/，实际 scripts/ 在上一级
-        project_dir = os.path.dirname(base_dir)
-        minimind_dir = os.path.join(project_dir, 'minimind-v')
-        model_vlm_path = os.path.join(minimind_dir, 'model', 'model_vlm.py')
-
-        if not os.path.exists(model_vlm_path):
-            check("model_vlm.py 不存在时返回 False", result is False)
-        else:
-            check("model_vlm.py 存在时返回 True", result is True)
-    except Exception as e:
-        check("is_available() 不应抛异常", False, f"抛出: {e}")
-
-
-def test_vlm_setup_offline():
-    """测试 setup_vlm.py 离线安装验证逻辑。
-
-    验证安装器能正确检测模型文件完整性。
-    """
-    print("\n[V19-15] setup_vlm.py — 离线安装验证")
-    import tempfile
-    import shutil
-
-    from scripts.setup_vlm import install_offline
-
-    test_dir = tempfile.mkdtemp(prefix="notemind_vlm_setup_")
-    try:
-        # 测试：不存在的模型包
-        result = install_offline("/nonexistent/path.tar.gz", test_dir)
-        check("不存在的模型包返回 False", result is False)
-
-        # 测试：创建空的 tar.gz 文件，应被拒绝
-        fake_archive = os.path.join(test_dir, "fake.tar.gz")
-        with open(fake_archive, "wb") as f:
-            f.write(b"not a real tar.gz")
-        result = install_offline(fake_archive, test_dir)
-        check("无效的 tar.gz 返回 False", result is False)
-
-    finally:
-        shutil.rmtree(test_dir, ignore_errors=True)
-
-
-def test_vlm_env_disabled():
-    """测试 NOTEMIND_LOCAL_VLM=0 时禁用本地 VLM。"""
-    print("\n[V19-16] vlm_local.py — 环境变量禁用")
-    import os
-
-    # 保存原值
-    original = os.environ.get("NOTEMIND_LOCAL_VLM")
-
-    try:
-        os.environ["NOTEMIND_LOCAL_VLM"] = "0"
-        from scripts.vlm_local import test_local_vlm
-
-        results = test_local_vlm(None)
-        check("禁用时 available=False", results["available"] is False)
-        check("错误信息包含禁用", "禁用" in (results.get("error") or ""))
-    finally:
-        # 恢复原值
-        if original is None:
-            os.environ.pop("NOTEMIND_LOCAL_VLM", None)
-        else:
-            os.environ["NOTEMIND_LOCAL_VLM"] = original
 
 
 def test_compute_source_relative_path():
@@ -661,6 +543,62 @@ def test_align_vault_dirs_to_source():
         cleanup(test_dir)
 
 
+def test_analyze_image_rapidocr_only():
+    """测试 analyze_image 使用 RapidOCR 而非 VLM。"""
+    print("\n[V19-23] ai_client.py — analyze_image RapidOCR 实现")
+    from scripts.ai_client import analyze_image
+
+    # 验证函数签名和行为：不再依赖 vlm_local 模块
+    check("analyze_image 函数存在", callable(analyze_image))
+
+    # 验证不依赖 vlm_local
+    import inspect
+    source = inspect.getsource(analyze_image)
+    check("不引用 vlm_local 模块", "vlm_local" not in source)
+    check("使用 RapidOCR", "RapidOCR" in source or "_get_ocr_instance" in source)
+
+
+def test_ingest_cache_clear():
+    """测试 IngestCache.invalidate_all() 方法存在且可用。"""
+    print("\n[V19-24] ingest_cache.py — cache.invalidate_all() 方法")
+    import tempfile
+    import shutil
+    from scripts.ingest_cache import IngestCache
+
+    test_dir = tempfile.mkdtemp(prefix="notemind_cache_test_")
+    try:
+        vault = os.path.join(test_dir, "vault")
+        os.makedirs(vault)
+
+        cache = IngestCache(vault)
+        # 放入一些数据
+        cache.put("/test/file.txt", "sha256abc", ["/output/file.md"], "category", ["tag1"])
+        stats_before = cache.stats()
+        check("缓存有数据", stats_before["total"] > 0)
+
+        # 清除缓存
+        cache.invalidate_all()
+        stats_after = cache.stats()
+        check("清除后缓存为空", stats_after["total"] == 0)
+    finally:
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+def test_analyzer_no_vlm():
+    """测试 analyzer._describe_image 不再依赖 VLM。"""
+    print("\n[V19-25] analyzer.py — 无 VLM 依赖")
+    from scripts.analyzer import _describe_image
+
+    # 验证函数存在
+    check("_describe_image 函数存在", callable(_describe_image))
+
+    # 验证不引用 vlm_local
+    import inspect
+    source = inspect.getsource(_describe_image)
+    check("不引用 vlm_local 模块", "vlm_local" not in source)
+    check("不引用 MiniMind", "minimind" not in source.lower())
+
+
 if __name__ == "__main__":
     print("=" * 50)
     print("NoteMind v1.9.5 专项测试")
@@ -672,7 +610,6 @@ if __name__ == "__main__":
         test_sqlite_status_record()
         test_file_update_detection()
         test_unsupported_file_handling()
-        test_local_vlm_availability()
         test_reasoning_content_filtering()
         test_status_summary()
         test_moc_split()
@@ -680,15 +617,15 @@ if __name__ == "__main__":
         test_file_update_with_md5_change()
         test_sqlite_status_fields()
         test_failed_record_sqlite()
-        test_vlm_model_vlm_py_missing()
-        test_vlm_setup_offline()
-        test_vlm_env_disabled()
         test_compute_source_relative_path()
         test_moc_format_new()
         test_frontmatter_vault_rel_path()
         test_archive_link_wikilink_format()
         test_compute_vault_rel_path()
         test_align_vault_dirs_to_source()
+        test_analyze_image_rapidocr_only()
+        test_ingest_cache_clear()
+        test_analyzer_no_vlm()
     except Exception as e:
         print(f"\n⚠️  测试异常: {e}")
         import traceback

@@ -37,21 +37,6 @@ inbox/
 *.doc
 *.mdx
 
-# VLM 模型权重（不纳入 git，用户自行下载/通过 setup_vlm.py 安装）
-# 只排除大文件，保留 minimind-v 其他所有内容
-*.bin
-*.pth
-*.safetensors
-*.tar.gz
-minimind-v/model/__pycache__/
-minimind-v/modelscope_cache/
-
-# 排除全局 config.json 对 VLM 模型配置的排除
-!minimind-v/model/siglip2-*/config.json
-!minimind-v/model/siglip2-*/configuration.json
-!minimind-v/model/siglip2-*/preprocessor_config.json
-!minimind-v/model/siglip2-*/README.md
-
 # Release 产物（本地生成，不纳入 git）
 release/
 
@@ -64,10 +49,6 @@ knowledge-base/
 # 测试报告/图片
 tests/MINIMIND_TEST_REPORT.md
 tests/test_image.png
-
-# minimind-v 运行时缓存
-minimind-v/model/siglip2-*/.msc
-minimind-v/model/siglip2-*/.mv
 
 # IDE
 .vscode/
