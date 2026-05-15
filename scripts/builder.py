@@ -107,6 +107,8 @@ class MarkdownBuilder:
     def add_archive_link(self, archive_filename: str, category: str = None, original_path: str = None) -> "MarkdownBuilder":
         """添加源文件 wikilink（不再归档文件，只记录链接）。
 
+        图片文件保留后缀（如 [[path/photo.jpg]]），其他文件去掉后缀。
+
         Args:
             archive_filename: 源文件名
             category: 分类路径（用于显示）
@@ -115,15 +117,23 @@ class MarkdownBuilder:
         if not archive_filename:
             return self
 
+        # 图片文件保留后缀
+        image_exts = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg"}
+        is_image = any(archive_filename.lower().endswith(ext) for ext in image_exts)
+
         # 优先使用 original_path（带路径的 wikilink），回退到仅文件名
         if original_path:
-            # 用字符串操作，避免 Path 在 Windows 上输出反斜杠
-            link_path = original_path.rsplit(".", 1)[0] if "." in original_path else original_path
+            if is_image:
+                link_path = original_path  # 图片保留后缀
+            else:
+                link_path = original_path.rsplit(".", 1)[0] if "." in original_path else original_path
             self.parts.append("## 原始文件\n")
             self.parts.append(f"- 原文：[[{link_path}]]\n\n")
         else:
-            # 去掉扩展名，取纯文件名
-            stem = archive_filename.rsplit(".", 1)[0] if "." in archive_filename else archive_filename
+            if is_image:
+                stem = archive_filename  # 图片保留完整文件名
+            else:
+                stem = archive_filename.rsplit(".", 1)[0] if "." in archive_filename else archive_filename
             self.parts.append("## 原始文件\n")
             self.parts.append(f"- 原文：[[{stem}]]\n\n")
         return self

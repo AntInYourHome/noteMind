@@ -28,9 +28,11 @@ class DocumentIndex:
     def _compute_wikilink(abs_path: str, vault_path: str = None) -> str:
         """从绝对路径计算 Obsidian wikilink。
 
-        优先使用 vault 内相对路径（去掉 .md 后缀）。
+        优先使用 vault 内相对路径。
         例如: /vault/安全/操作系统安全/2026-05-07-白皮书.md
         → 安全/操作系统安全/2026-05-07-白皮书
+
+        图片文件保留后缀：/vault/安全/photo.jpg → 安全/photo.jpg
 
         如果 vault_path 未提供，回退到基于已知分类目录的匹配。
         """
@@ -39,11 +41,18 @@ class DocumentIndex:
         stem = p.with_suffix("")
         parts = stem.parts
 
+        # 图片文件保留后缀
+        image_exts = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg"}
+        is_image = p.suffix.lower() in image_exts
+
         # 如果提供了 vault_path，优先使用相对路径
         if vault_path:
             try:
                 vault_p = Path(vault_path)
-                rel = os.path.relpath(str(stem), str(vault_p))
+                if is_image:
+                    rel = os.path.relpath(str(p), str(vault_p))
+                else:
+                    rel = os.path.relpath(str(stem), str(vault_p))
                 if not rel.startswith(".."):
                     return rel.replace(os.sep, "/")
             except (ValueError, OSError):
@@ -53,8 +62,14 @@ class DocumentIndex:
         known_tops = {"安全", "操作系统", "技术", "个人", "其他"}
         for i, part in enumerate(parts):
             if part in known_tops:
-                return "/".join(parts[i:])
+                base = "/".join(parts[i:])
+                if is_image:
+                    # 补回后缀
+                    return base + p.suffix
+                return base
         # 兜底：用最后三级
+        if is_image:
+            return p.name  # 图片直接用文件名
         return "/".join(parts[-3:]) if len(parts) >= 3 else stem.name
 
     def compute_links(self, max_links: int = 5, min_score: float = 2.0) -> dict[str, list[str]]:

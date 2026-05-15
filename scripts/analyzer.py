@@ -44,15 +44,42 @@ class AnalysisResult:
         self.image_descriptions = []
 
 
+def _summarize_ocr_text(ocr_text: str, max_chars: int = 5000) -> str:
+    """将 OCR 提取的散乱文字通过 LLM 总结为通顺的描述。
+
+    OCR 输出通常是按行/区块的碎片化文本，直接作为描述可读性差。
+    此函数调用 LLM 将碎片文字总结为结构化的自然语言描述。
+    """
+    if len(ocr_text) > max_chars:
+        ocr_text = ocr_text[:max_chars] + "\n...(内容过长已截断)"
+
+    prompt = (
+        "以下是从图片中通过 OCR 提取的文字片段，这些文字比较散乱、碎片化。\n"
+        "请将这些碎片整理为一段通顺的图片内容描述（2-4 句话），保留关键信息。\n"
+        "如果文字本身是表格数据（如价格、数字），简要说明这是一张什么类型的表格。\n\n"
+        f"OCR 文字：\n{ocr_text}"
+    )
+    try:
+        from scripts.ai_client import _call_api
+        result = _call_api([{"role": "user", "content": prompt}], max_tokens=300)
+        summary = result.get("content", "").strip()
+        return summary if summary else ocr_text[:500]
+    except Exception as e:
+        logger.debug(f"  OCR 文字总结失败: {e}，返回原始 OCR 文本")
+        return ocr_text[:500]
+
+
 def _describe_image(img_path: str, ocr_text: str = "") -> str:
-    """图片描述：使用 RapidOCR 提取图片中的文字。
+    """图片描述：OCR 提取文字后，调用 LLM 总结为通顺的描述。
 
     策略：
       1. 先尝试 OCR 提取文字
-      2. 如果 OCR 无文字，返回空字符串让调用方跳过
+      2. 如果 OCR 有文字，调用 LLM 将碎片文字总结为通顺描述
+      3. 如果 OCR 无文字，返回空字符串让调用方跳过
     """
     if ocr_text and ocr_text.strip():
-        return ocr_text.strip()
+        # OCR 有文字 → 调用 LLM 总结，而非返回散乱的原始 OCR 文本
+        return _summarize_ocr_text(ocr_text.strip())
 
     # OCR 无文字时，尝试用 ai_client 再次 OCR
     try:
@@ -139,6 +166,9 @@ class LongDocStrategy:
         total_chunks = len(chunks)
         logger.info(f"  [合并] {total_sections} 章合并为 {total_chunks} 组（每组 {chunk_size} 章）")
 
+        # 大文件进度提示
+        logger.info(f"  [进度] 预计需要 {total_chunks} 次 API 调用，每次调用预计 5-15 秒...")
+
         # 预计算图片的 OCR+VLM 组合描述，混入章节文本
         image_context = self._build_image_context(images, image_ocr_texts)
 
@@ -148,9 +178,10 @@ class LongDocStrategy:
             if image_context:
                 enriched_text = f"{chunk['combined_text']}\n\n[文档图片]\n{image_context}"
 
-            logger.info(f"  AI 分析组 [{i+1}/{total_chunks}] (含 {len(chunk['sections'])} 章)")
+            logger.info(f"  [进度] AI 分析组 [{i+1}/{total_chunks}] (含 {len(chunk['sections'])} 章)")
             try:
                 summary = generate_summary(enriched_text)
+                logger.info(f"  [进度] 第 {i+1}/{total_chunks} 组完成 ✅")
             except Exception as e:
                 logger.error(f"  [FAIL] 分析组 {i+1} 失败: {e}")
                 summary = f"（分析失败: {e}）"

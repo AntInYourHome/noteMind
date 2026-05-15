@@ -29,12 +29,45 @@ from scripts.analyzer import (
 # ── 场景 1: 纯图片文件 ──────────────────────────────────────
 
 class TestDescribeImage:
-    """验证 _describe_image 的 OCR 提取行为。"""
+    """验证 _describe_image 的 OCR 摘要行为。"""
 
-    def test_ocr_text_returned(self):
-        """当有 OCR 文字时，应返回 OCR 文字。"""
-        result = _describe_image("/fake/path.jpg", ocr_text="图片中的文字")
-        assert result == "图片中的文字"
+    def test_ocr_text_summarized(self):
+        """当有 OCR 文字时，应调用 LLM 总结而非直接返回原始文本。"""
+        with patch('scripts.analyzer._summarize_ocr_text') as mock_sum:
+            mock_sum.return_value = "这是一张成都旅游攻略图"
+            result = _describe_image("/fake/path.jpg", ocr_text="本地人做的成都攻略\n成都博物馆\n鹤鸣茶社\n天府广场")
+            mock_sum.assert_called_once()
+            assert result == "这是一张成都旅游攻略图"
+
+    def test_summarize_ocr_text_calls_llm(self):
+        """_summarize_ocr_text 应调用 LLM 总结散乱文字。"""
+        with patch('scripts.ai_client._call_api') as mock_api:
+            mock_api.return_value = {"content": "总结后的文字"}
+            from scripts.analyzer import _summarize_ocr_text
+            result = _summarize_ocr_text("碎片1\n碎片2\n碎片3")
+            assert result == "总结后的文字"
+            # 验证 LLM 调用包含 OCR 文字
+            call_args = mock_api.call_args[0]
+            assert "碎片1" in call_args[0][0]["content"]
+
+    def test_summarize_ocr_text_long_text_truncated(self):
+        """超长 OCR 文字应截断后总结。"""
+        with patch('scripts.ai_client._call_api') as mock_api:
+            mock_api.return_value = {"content": "总结"}
+            from scripts.analyzer import _summarize_ocr_text
+            long_text = "x" * 10000
+            _summarize_ocr_text(long_text)
+            # 验证截断标记
+            call_args = mock_api.call_args[0]
+            assert "内容过长已截断" in call_args[0][0]["content"]
+
+    def test_summarize_ocr_text_llm_failure_fallback(self):
+        """LLM 调用失败时应 fallback 到原始 OCR 文本。"""
+        with patch('scripts.ai_client._call_api') as mock_api:
+            mock_api.side_effect = RuntimeError("API 失败")
+            from scripts.analyzer import _summarize_ocr_text
+            result = _summarize_ocr_text("原始 OCR 文字")
+            assert "原始 OCR 文字" in result
 
     def test_no_ocr_fallback_to_analyze_image(self):
         """当无 OCR 文字时，应尝试 analyze_image（RapidOCR）。"""
