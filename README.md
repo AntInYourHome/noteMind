@@ -60,6 +60,7 @@ python import.py --source /path/to/files
 | **状态管理** | SQLite 增量处理 + MD5 去重 |
 | **输出格式** | 纯 Markdown + Obsidian `[[wikilink]]` |
 | **Vault 结构** | 镜像源目录结构，跨设备可迁移 |
+| **架构** | 模块化设计（8 个核心脚本模块 + 薄 CLI 入口） |
 | **许可证** | MIT |
 
 ## 核心特性
@@ -73,8 +74,10 @@ python import.py --source /path/to/files
 | **文档双链** | 基于标签/分类/内容相似度自动建立 `[[wikilink]]` |
 | **MD5 去重** | 重复文件自动跳过 |
 | **知识树 MOC** | 自动生成 MOC.md 多级导航页（>500 条自动分割） |
+| **增量更新** | 源文件内容变更检测（MD5），自动重新处理并更新 MOC/双链 |
 | **级联删除** | 删除源文件时自动清理关联 Wiki 页面 |
 | **健康检查** | 检测孤立页、断链、无外链页 |
+| **模块化架构** | import.py 瘦身 80%，7 个新模块各司其职 |
 
 ## 安装
 
@@ -113,15 +116,36 @@ python import.py --check
 
 # 更新已有文档
 python import.py --update
+
+# 快速迁移已有文档到新格式
+python import.py --migrate
+
+# 强制重新处理所有图片
+python import.py --update-image
+
+# Wiki 健康检查
+python import.py --lint
+
+# 队列模式（支持崩溃恢复）
+python import.py --source /path/to/files --queue
+python import.py --resume  # 从上次中断处恢复
 ```
 
 ## 项目结构
 
 ```
 noteMind/
-├── import.py              # 主入口（向后兼容）
+├── import.py              # 薄 CLI 入口（~450行，模式分发 + 组件组装）
 ├── src/notemind/          # Python 包（pip install 后可用）
 ├── scripts/               # 核心模块
+│   ├── config.py          # 配置加载
+│   ├── path_utils.py      # 路径计算工具
+│   ├── file_collector.py  # 文件收集
+│   ├── status_db.py       # SQLite 状态追踪（类封装）
+│   ├── file_processor.py  # 核心处理管线（parse → analyze → build）
+│   ├── moc_manager.py     # MOC 生成（统一树渲染）
+│   ├── handlers.py        # 不支持/失败文件处理器
+│   ├── vault_ops.py       # 对齐/迁移/校验操作
 │   ├── ai_client.py       # AI 多 Provider 池 + 重试
 │   ├── parsers.py         # 格式解析器（含智能 OCR）
 │   ├── analyzer.py        # AI 分析策略
@@ -132,8 +156,8 @@ noteMind/
 │   ├── cascade_delete.py  # 级联删除
 │   ├── lint.py            # Wiki 健康检查
 │   └── ingest_*.py        # 增量分析管道
-├── minimind-v/            # 本地 VLM 模型（可选组件）
-├── tests/                 # 测试套件
+├── knowledge-base/        # 输出 Vault（Obsidian 打开）
+├── tests/                 # 测试套件（159 个用例）
 └── docs/                  # 文档
 ```
 
