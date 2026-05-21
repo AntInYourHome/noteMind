@@ -98,10 +98,59 @@ def _build_doc_map(vault_path: str) -> dict:
     return doc_map
 
 
+def _read_frontmatter(md_path: str) -> tuple:
+    """仅读取 frontmatter 区域，返回 (original_path, category, tags_raw)。
+
+    不读取整个文件，对于大 MD 文件（含正文/摘要）有显著性能提升。
+    """
+    original_path = ""
+    current_category = ""
+    tags_raw = ""
+    try:
+        with open(md_path, "r", encoding="utf-8") as fh:
+            # 只读取前 500 字节（足够覆盖 frontmatter）
+            header = fh.read(500)
+            for line in header.split("\n"):
+                if line.startswith("original_path:"):
+                    original_path = line[len("original_path:"):].strip()
+                elif line.startswith("category:"):
+                    current_category = line[len("category:"):].strip()
+                elif line.startswith("tags:"):
+                    tags_raw = line[len("tags:"):].strip()
+                # frontmatter 结束标记后不再读取
+                if line.strip() == "---" and original_path and current_category:
+                    break
+    except Exception:
+        pass
+    return original_path, current_category, tags_raw
+
+
+def _build_source_stem_map(source_dir: str) -> dict:
+    """扫描 source 目录，构建 {stem: current_source_rel_path} 映射。
+
+    同时记录 {filename: current_source_rel_path} 用于精确匹配。
+    """
+    stem_map = {}  # stem → rel_path (relative to source_dir)
+    name_map = {}  # filename → rel_path
+    for root, _, files in os.walk(source_dir):
+        rel_dir = os.path.relpath(root, source_dir)
+        if rel_dir == ".":
+            rel_dir = ""
+        for fn in files:
+            full_rel = os.path.join(rel_dir, fn).replace(os.sep, "/") if rel_dir else fn
+            stem = Path(fn).stem
+            # 优先记录更深层的路径（更具体）
+            if stem not in stem_map or full_rel.count("/") > stem_map[stem].count("/"):
+                stem_map[stem] = full_rel
+            name_map[fn] = full_rel
+    return stem_map, name_map
+
+
 def update_existing_docs(vault_path: str, source_dir: str) -> None:
     """校验并修复已有 MD 文件的分类和目录映射。
 
     基于 source 路径重新归类。
+    支持检测源文件移动：通过文件名在 source 中匹配当前位置，而非依赖过时的 original_path。
     """
     logger.info(f"开始校验修复 vault: {vault_path}")
 
@@ -111,9 +160,11 @@ def update_existing_docs(vault_path: str, source_dir: str) -> None:
     wikilink_fixed = 0
     skipped = 0
     errors = 0
+    source_moved = 0  # 源文件位置已移动的计数
 
     # 构建映射
     doc_map = _build_doc_map(vault_path)
+    source_stem_map, source_name_map = _build_source_stem_map(source_dir)
 
     # 逐文件修复
     for root, _, files in os.walk(vault_path):
@@ -125,25 +176,36 @@ def update_existing_docs(vault_path: str, source_dir: str) -> None:
             scanned += 1
 
             try:
-                with open(md_path, "r", encoding="utf-8") as fh:
-                    content = fh.read()
-
-                original_path = ""
-                current_category = ""
-                for line in content.split("\n"):
-                    if line.startswith("original_path:"):
-                        original_path = line[len("original_path:"):].strip()
-                    elif line.startswith("category:"):
-                        current_category = line[len("category:"):].strip()
+                # 仅读取 frontmatter（性能优化：不读全文）
+                original_path, current_category, tags_raw = _read_frontmatter(md_path)
 
                 if not original_path:
                     skipped += 1
                     continue
 
-                # 计算正确分类
-                if original_path.startswith("source/"):
+                # 在 source 中查找当前文件位置（按文件名精确匹配，回退到 stem 匹配）
+                md_stem = Path(f).stem
+                current_source_rel = source_name_map.get(f) or source_stem_map.get(md_stem)
+
+                # 确定源文件的实际路径
+                if current_source_rel:
+                    # 找到当前源文件位置（可能已移动）
+                    full_src_path = os.path.join(source_dir, current_source_rel.replace("/", os.sep))
+                    # 检查是否移动了：对比 current_source_rel 与 original_path 去掉 "source/" 前缀
+                    old_source_rel = original_path[len("source/"):] if original_path.startswith("source/") else original_path
+                    if old_source_rel != current_source_rel:
+                        source_moved += 1
+                        # 更新 original_path 到最新位置
+                        new_original_path = "source/" + current_source_rel
+                        original_path = new_original_path
+                        logger.info(f"  [源文件移动] {f}: {old_source_rel} → {current_source_rel}")
+                elif original_path.startswith("source/"):
+                    # 未在 source 中找到，尝试用旧路径
                     src_relative = original_path[len("source/"):]
                     full_src_path = os.path.join(source_dir, src_relative)
+                    if not os.path.exists(full_src_path):
+                        skipped += 1
+                        continue
                 else:
                     full_src_path = os.path.join(vault_path, original_path)
                     if not os.path.exists(full_src_path):
@@ -154,8 +216,29 @@ def update_existing_docs(vault_path: str, source_dir: str) -> None:
                 needs_category_fix = (current_category != correct_category)
                 correct_dir = os.path.join(vault_path, correct_category)
                 needs_dir_fix = (os.path.normpath(root) != os.path.normpath(correct_dir))
+                # 跟踪是否需要更新 original_path（源文件移动但分类/目录可能不变）
+                old_op_for_update = "source/" + old_source_rel if old_source_rel else old_source_rel
+                new_op_for_update = "source/" + current_source_rel
+                needs_original_path_update = (old_op_for_update != new_op_for_update and
+                                              current_source_rel is not None)
+
+                if not needs_category_fix and not needs_dir_fix and not needs_original_path_update:
+                    skipped += 1
+                    continue
 
                 content_changed = False
+                content = None  # 延迟加载
+
+                # 延迟读取全文（仅在需要修改时）
+                if content is None:
+                    with open(md_path, "r", encoding="utf-8") as fh:
+                        content = fh.read()
+
+                # 更新 original_path
+                if needs_original_path_update:
+                    content = content.replace(f"original_path: {old_op_for_update}",
+                                              f"original_path: {new_op_for_update}", 1)
+                    content_changed = True
 
                 if needs_category_fix:
                     old_cat_line = f"category: {current_category}"
@@ -216,7 +299,7 @@ def update_existing_docs(vault_path: str, source_dir: str) -> None:
                 errors += 1
                 logger.warning(f"  校验失败 {md_path}: {e}")
 
-    logger.info(f"扫描 {scanned} 个 MD 文件，修复分类 {category_fixed} 个，修复目录 {dir_fixed} 个，修复链接 {wikilink_fixed} 个，跳过 {skipped} 个，错误 {errors} 个")
+    logger.info(f"扫描 {scanned} 个 MD 文件，源文件移动 {source_moved} 个，修复分类 {category_fixed} 个，修复目录 {dir_fixed} 个，修复链接 {wikilink_fixed} 个，跳过 {skipped} 个，错误 {errors} 个")
 
     # 重建索引
     moc = MOCManager(vault_path)
