@@ -285,6 +285,61 @@ def collect_rss(statuses):
     return items
 
 
+# ---------------------------------------------------------------- top1
+def pick_top1(items_by_key):
+    """评选当日 Top1：相关度 + 跨层加成 + 新信号优先；watchlist 日常动态不参选。"""
+    cands = []
+    for key, group in items_by_key.items():
+        for it in group:
+            if "error" in it or not it.get("url"):
+                continue
+            if it.get("kind") == "gh_watch":
+                continue
+            cross = len([t for t in it.get("tags", []) if t != "综合"])
+            prio = (it.get("score", 0) + 4 * max(0, cross - 1)
+                    + (3 if it.get("kind") == "paper" else 0)
+                    + (2 if it.get("kind") == "gh_new" else 0))
+            cands.append((prio, it))
+    if not cands:
+        return None
+    cands.sort(key=lambda x: -x[0])
+    return cands[0][1]
+
+
+def fetch_detail(item):
+    """预取 Top1 原文材料：论文取完整摘要+作者，仓库取 README，新闻取正文文本。失败容忍。"""
+    detail = {"fetched": "", "source_type": item.get("kind", "")}
+    try:
+        if item.get("kind") == "paper":
+            m = re.search(r"abs/([0-9.]+)", item["url"])
+            if m:
+                api = ("http://export.arxiv.org/api/query?id_list=" + m.group(1))
+                root = ET.fromstring(http_get(api, timeout=20))
+                e = root.find("a:entry", ARXIV_NS)
+                if e is not None:
+                    authors = ", ".join(a.findtext("a:name", "", ARXIV_NS)
+                                       for a in e.findall("a:author", ARXIV_NS)[:8])
+                    summary = re.sub(r"\s+", " ", e.findtext("a:summary", "", ARXIV_NS)).strip()
+                    detail["fetched"] = "作者: %s\n\n完整摘要: %s" % (authors, summary)
+        elif str(item.get("kind", "")).startswith("gh"):
+            for fn in ("README.md", "readme.md", "README_zh.md", "README"):
+                try:
+                    raw = http_get("https://raw.githubusercontent.com/%s/HEAD/%s"
+                                   % (item["title"], fn), timeout=20).decode("utf-8", "replace")
+                    if raw.strip() and not raw.startswith("404"):
+                        detail["fetched"] = raw[:6000]
+                        break
+                except Exception:
+                    continue
+        elif item.get("kind") == "news":
+            html = http_get(item["url"], timeout=20).decode("utf-8", "replace")
+            text = strip_html(re.sub(r"(?is)<(script|style).*?</\1>", " ", html))
+            detail["fetched"] = text[:4000]
+    except Exception as e:
+        detail["fetched"] = "（预取失败：%s，请直接打开链接分析）" % str(e)[:80]
+    return detail
+
+
 # ---------------------------------------------------------------- report
 def fmt_item(it, mark_new, idx):
     icon = {"paper": "📄", "gh_new": "🌱", "gh_active": "🔥", "gh_watch": "⭐", "news": "🛰️"}.get(it.get("kind"), "•")
@@ -317,7 +372,7 @@ def fmt_item(it, mark_new, idx):
     return line + "\n   <%s>%s" % (it.get("url", ""), body)
 
 
-def build_report(items_by_key, statuses, state, today):
+def build_report(items_by_key, statuses, state, today, top1=None):
     R = CFG["report"]
     papers, gh_new, gh_active, gh_watch, news = (items_by_key[k] for k in
                                                  ["paper", "gh_new", "gh_active", "gh_watch", "news"])
@@ -372,6 +427,19 @@ def build_report(items_by_key, statuses, state, today):
     if not (top_paper or top_gh or top_news):
         L.append("- 今日无高热度条目。")
     L.append("")
+
+    # top1
+    if top1:
+        cross = "、".join(t for t in top1.get("tags", []) if t != "综合") or "单层"
+        L.append("## 🏆 每日 Top1（自动评选）")
+        L.append("")
+        L.append(fmt_item(top1, is_new(top1), 1))
+        L.append("")
+        L.append("**入选理由**：相关度 %d ｜ 层级定位：%s ｜ 评选规则 = 相关度 + 跨层加成 + 新信号优先（watchlist 日常动态不参选）。"
+                 % (top1.get("score", 0), cross))
+        L.append("")
+        L.append("<!-- top1-analysis: 分析师在此插入深度分析（是什么/技术机制/证据强度/四层定位/影响与对策） -->")
+        L.append("")
 
     # papers
     L.append("## 📄 论文雷达（arXiv · 相关度排序）")
@@ -523,16 +591,26 @@ def main():
                     "gh_watch": gh_watch, "news": news}
     all_items = [it for g in items_by_key.values() for it in g]
 
+    # Top1 评选与原文预取（预取材料存 data/top1.json，供分析师/LLM 深度分析）
+    top1 = pick_top1(items_by_key)
+    top1_payload = None
+    if top1:
+        top1_payload = dict(top1)
+        top1_payload["detail"] = fetch_detail(top1)
+
     os.makedirs(os.path.join(ROOT, "data"), exist_ok=True)
     with open(ITEMS_PATH, "w", encoding="utf-8") as f:
         json.dump({"date": args.date, "statuses": statuses, "items": all_items},
                   f, ensure_ascii=False, indent=1)
+    if top1_payload:
+        with open(os.path.join(ROOT, "data", "top1.json"), "w", encoding="utf-8") as f:
+            json.dump(top1_payload, f, ensure_ascii=False, indent=1)
 
     if args.json_only:
         print("items=%d -> %s" % (len(all_items), ITEMS_PATH))
         return
 
-    report = build_report(items_by_key, statuses, state, args.date)
+    report = build_report(items_by_key, statuses, state, args.date, top1=top1)
     os.makedirs(REPORT_DIR, exist_ok=True)
     report_path = os.path.join(REPORT_DIR, "intel-%s.md" % args.date)
     with open(report_path, "w", encoding="utf-8") as f:

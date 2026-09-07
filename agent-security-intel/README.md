@@ -48,7 +48,8 @@ agent-security-intel/
 ## 报告结构
 
 1. **⚡ 今日速览** — 按相关度自动挑选的 Top 条目
-2. **📄 论文雷达** — arXiv 近 7 天，关键词加权排序
+2. **🏆 每日 Top1** — 自动评选当日最重要条目（相关度+跨层加成+新信号优先），预取原文材料（arXiv 完整摘要/GitHub README/新闻正文，存 `data/top1.json`），由分析师/自动化做深度打开分析（是什么/技术机制/证据强度/四层定位/影响与对策）
+3. **📄 论文雷达** — arXiv 近 14 天，关键词加权排序
 3. **🌱 GitHub 新星** — 近 14 天新建仓库，安全相关优先
 4. **🔥 GitHub 活跃** — 近 7 天活跃存量项目
 5. **⭐ Watchlist 动态** — 23 个成熟项目（promptfoo/garak/PyRIT/SkillSpector/agent-scan…）星增排序
