@@ -11,6 +11,8 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB}"
 os.environ["JWT_SECRET"] = "test-secret-0123456789abcdef-0123456789abcdef"
 os.environ["STATIC_DIR"] = ""
 
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -18,16 +20,27 @@ from app.db import engine
 from app.main import app
 
 
+def _remove_test_db():
+    """Windows 下 WAL 句柄释放有延迟：重试清理 db 及 -wal/-shm 文件。"""
+    for suffix in ("", "-wal", "-shm"):
+        p = _TEST_DB.parent / (_TEST_DB.name + suffix)
+        for _ in range(30):
+            try:
+                if p.exists():
+                    p.unlink()
+                break
+            except PermissionError:
+                time.sleep(0.1)
+
+
 @pytest.fixture()
 def client():
     _TEST_DB.parent.mkdir(parents=True, exist_ok=True)
-    if _TEST_DB.exists():
-        _TEST_DB.unlink()
+    _remove_test_db()
     with TestClient(app) as c:  # 触发 startup：建表 + 种子 admin
         yield c
     engine.dispose()  # Windows 下必须先释放连接池，否则文件被占用无法删除
-    if _TEST_DB.exists():
-        _TEST_DB.unlink()
+    _remove_test_db()
 
 
 @pytest.fixture()

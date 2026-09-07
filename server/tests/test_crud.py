@@ -3,7 +3,17 @@ import pytest
 from fastapi import HTTPException
 
 from app.crud import coerce, table_columns
+from app.db import engine
 from app.modules.notes.models import Note
+
+
+def test_sqlite_wal_and_busy_timeout():
+    """SQLite 连接必须启用 WAL（读写并发）与 busy_timeout（写锁排队）。"""
+    with engine.connect() as c:
+        mode = str(c.exec_driver_sql("PRAGMA journal_mode").scalar()).lower()
+        timeout = int(c.exec_driver_sql("PRAGMA busy_timeout").scalar())
+    assert mode == "wal"
+    assert timeout >= 5000
 
 
 def test_table_columns_meta():
