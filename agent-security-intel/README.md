@@ -1,6 +1,13 @@
-# agent-security-intel — AI Agent / AgentOS 安全每日情报
+# agent-security-intel — AI Agent 安全 × 硬件抓手 每日情报
 
-每日自动采集并分析 **AI Agent / AgentOS 安全**领域的论文、GitHub 热点、安全资讯与会议动态，生成中文 Markdown 情报报告。纯 Python 标准库实现，无第三方依赖。
+每日自动采集并分析 **AI 安全全栈情报**，按四层模型组织（总纲见 [docs/unified-map.md](docs/unified-map.md)）：
+
+- **L1 模型层**：越狱/对抗/后门（OWASP LLM Top 10）
+- **L2 Agent/AgentOS 层**：提示注入、MCP/技能供应链、治理（OWASP Agentic ASI01-10）
+- **L3 硬件/基础设施层**：TEE 机密计算、GPU 攻击面、远程证明
+- **L4 物理执行层**：车载安全 MCU/安全岛、VLA/具身智能、故障注入
+
+生成中文 Markdown 情报报告并每日推送到 noteMind 仓库 `daily-intel` 分支。纯 Python 标准库实现，无第三方依赖。
 
 ## 快速开始
 

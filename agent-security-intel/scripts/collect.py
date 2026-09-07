@@ -204,20 +204,34 @@ def collect_arxiv(statuses):
         "search_query": query, "sortBy": "submittedDate", "sortOrder": "descending",
         "max_results": cfg["max_results"]})
     items = []
+    root = None
+    for attempt in range(3):
+        try:
+            root = ET.fromstring(http_get(url))
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < 2:
+                time.sleep(20 * (attempt + 1))  # arXiv 礼貌性重试：退避后再试
+                continue
+            break
+        except Exception:
+            break
     try:
-        root = ET.fromstring(http_get(url))
-        for e in root.findall("a:entry", ARXIV_NS):
-            title = re.sub(r"\s+", " ", e.findtext("a:title", "", ARXIV_NS)).strip()
-            summary = re.sub(r"\s+", " ", e.findtext("a:summary", "", ARXIV_NS)).strip()
-            pub = e.findtext("a:published", "", ARXIV_NS)[:10]
-            link = e.findtext("a:id", "", ARXIV_NS)
-            cats = [c.attrib.get("term", "") for c in e.findall("a:category", ARXIV_NS)]
-            text = title + " " + summary
-            score, hits = score_text(text)
-            items.append({"kind": "paper", "title": title, "url": link, "date": pub,
-                          "cats": ",".join(cats[:3]), "desc": summary[:260],
-                          "score": score, "hits": hits[:6], "tags": tag_text(text)})
-        statuses.append(source_status("OK (%d条)" % len(items), "arXiv"))
+        if root is not None:
+            for e in root.findall("a:entry", ARXIV_NS):
+                title = re.sub(r"\s+", " ", e.findtext("a:title", "", ARXIV_NS)).strip()
+                summary = re.sub(r"\s+", " ", e.findtext("a:summary", "", ARXIV_NS)).strip()
+                pub = e.findtext("a:published", "", ARXIV_NS)[:10]
+                link = e.findtext("a:id", "", ARXIV_NS)
+                cats = [c.attrib.get("term", "") for c in e.findall("a:category", ARXIV_NS)]
+                text = title + " " + summary
+                score, hits = score_text(text)
+                items.append({"kind": "paper", "title": title, "url": link, "date": pub,
+                              "cats": ",".join(cats[:3]), "desc": summary[:260],
+                              "score": score, "hits": hits[:6], "tags": tag_text(text)})
+            statuses.append(source_status("OK (%d条)" % len(items), "arXiv"))
+        else:
+            statuses.append(source_status("FAIL: 多次重试后仍失败（arXiv 限流）", "arXiv"))
     except Exception as e:
         statuses.append(source_status("FAIL: " + str(e)[:60], "arXiv"))
     items.sort(key=lambda x: (-x["score"], x["date"]))
