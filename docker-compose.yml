@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tools
+      POSTGRES_USER: tools
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-tools_secret}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  server:
+    build: ./server
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg2://tools:${DB_PASSWORD:-tools_secret}@db:5432/tools
+      JWT_SECRET: ${JWT_SECRET:-change_me_please}
+    depends_on:
+      - db
+    volumes:
+      - uploads:/app/uploads
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+
+volumes:
+  pgdata:
+  uploads:

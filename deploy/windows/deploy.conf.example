@@ -1,0 +1,12 @@
+# Windows 部署配置（复制为 deploy.conf 后填写；__XXX__ 占位符必须替换）
+# 代码部署目录（后端 venv、.env、SQLite 数据都在这里）
+APP_HOME=__APP_HOME__
+# 后端监听端口（浏览器访问 http://本机IP:端口/）
+PORT=__PORT__
+# 计划任务名（卸载：schtasks /Delete /TN 该名称 /F）
+TASK_NAME=SuperTools
+# sqlite（默认，零依赖）| postgres（需自行安装并在 server\.env 配 DATABASE_URL）
+DB_MODE=sqlite
+# 留空则自动生成随机值
+JWT_SECRET=
+RETENTION_DAYS=90

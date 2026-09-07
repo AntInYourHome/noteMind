@@ -1,0 +1,2 @@
+# 使用 PostgreSQL 时额外安装（Windows/SQLite 部署不需要；Windows ARM 无 psycopg2 预编译包）
+psycopg2-binary

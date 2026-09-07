@@ -1,0 +1,33 @@
+# ============================================================
+# 超级小工具 · 部署配置（复制为 deploy.conf 后填写，不进 Git）
+# 所有 __XXX__ 占位符必须替换；install.sh 会校验并拒绝占位符残留
+# ============================================================
+
+# ---- 部署位置（占位符） ----
+# 代码部署目录（后端 venv、.env 都在这里）
+APP_HOME=__APP_HOME__
+# 前端静态文件目录（nginx 的 root）
+WEB_ROOT=__WEB_ROOT__
+# systemd 服务名（可用 super-tools；同机多实例时改不同名字）
+SERVICE_NAME=__SERVICE_NAME__
+# 运行后端的系统用户（需已存在）
+RUN_USER=__RUN_USER__
+# 后端监听端口（nginx 反代目标；改了要同步改端口映射预期）
+SERVER_PORT=__SERVER_PORT__
+# nginx 配置文件输出路径（整文件替换，请确认不会覆盖别人的配置）
+NGINX_CONF=/etc/nginx/nginx.conf
+
+# ---- 数据库（占位符；DB_MODE=sqlite 时下面 PG_* 忽略） ----
+# postgres | sqlite
+DB_MODE=__DB_MODE__
+PG_HOST=127.0.0.1
+PG_PORT=5432
+PG_USER=__PG_USER__
+PG_PASSWORD=__PG_PASSWORD__
+PG_DB=__PG_DB__
+
+# ---- 安全与其他 ----
+# 留空则安装时自动生成随机值
+JWT_SECRET=
+# 访问日志保留天数
+RETENTION_DAYS=90
