@@ -1,0 +1,2 @@
+# 使用 Samba 任务目录工具时安装（Linux 均有预编译包；Windows ARM 无 cryptography 预编译包，暂不支持）
+smbprotocol

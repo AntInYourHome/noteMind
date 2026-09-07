@@ -5,4 +5,5 @@ export const registry = {
   log_parser: () => import('./log_parser/LogParserView.vue'),
   arm_registers: () => import('./arm_registers/ArmRegistersView.vue'),
   suggestions: () => import('./suggestions/SuggestionsView.vue'),
+  samba: () => import('./samba/SambaTasksView.vue'),
 }

@@ -100,7 +100,7 @@ if [ "$(cd "$PKG" && pwd)" != "$(cd "$APP_HOME" && pwd)" ]; then
 fi
 python3 -m venv "$APP_HOME/server/venv"
 "$APP_HOME/server/venv/bin/pip" install -q \
-  -r server/requirements.txt -r server/requirements-dev.txt "${PIP_EXTRA[@]+"${PIP_EXTRA[@]}"}" \
+  -r server/requirements.txt -r server/requirements-dev.txt -r server/requirements-samba.txt "${PIP_EXTRA[@]+"${PIP_EXTRA[@]}"}" \
   -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # ---- 4. 数据库等敏感配置 → 独立配置文件 server/.env ----

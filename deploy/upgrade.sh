@@ -48,7 +48,7 @@ echo "== [2/6] 更新依赖 =="
 PIP_EXTRA=()
 if [ "$DB_MODE" = "postgres" ]; then PIP_EXTRA=(-r server/requirements-postgres.txt); fi
 server/venv/bin/pip install -q \
-  -r server/requirements.txt -r server/requirements-dev.txt ${PIP_EXTRA[@]+"${PIP_EXTRA[@]}"} \
+  -r server/requirements.txt -r server/requirements-dev.txt -r server/requirements-samba.txt ${PIP_EXTRA[@]+"${PIP_EXTRA[@]}"} \
   -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # ---- 3. 敏感配置：保留原 server/.env；缺失时仅 sqlite 可自动生成 ----
