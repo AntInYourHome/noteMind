@@ -1,7 +1,7 @@
 {
   "report": {
     "gh_min_score": 6,
-    "top_papers": 12,
+    "top_papers": 14,
     "top_gh_new": 10,
     "top_gh_watch": 15,
     "top_news": 15,
@@ -27,29 +27,45 @@
       "kkoci/Dealproof",
       "GitBodda/Confid-Intent-Tee",
       "microsoft/agent-framework",
-      "langfuse/langfuse"
+      "langfuse/langfuse",
+      "commaai/openpilot",
+      "autowarefoundation/autoware",
+      "linux-can/can-utils",
+      "commaai/panda",
+      "CaringCaribou/caringcaribou",
+      "COVESA/vehicle_signal_specification",
+      "aliasrobotics/RVD",
+      "uptane/uptane-standard"
     ],
     "emerging_searches": [
       { "label": "机密计算×LLM 新星（近14天新建）", "q": "\"confidential inference\" OR \"GPU TEE\" OR \"TEE agent\" OR \"confidential LLM\" OR \"enclave LLM\" created:>{cutoff}" },
-      { "label": "证明/信任根 新星（近14天新建）", "q": "\"remote attestation\" OR \"hardware root of trust\" OR \"measured boot\" created:>{cutoff} LLM OR agent OR AI" },
-      { "label": "GPU 攻击面新星（近14天新建）", "q": "\"rowhammer\" OR \"GPU side channel\" OR \"bit-flip attack\" OR \"GPU memory leak\" created:>{cutoff}" }
+      { "label": "GPU 攻击面新星（近14天新建）", "q": "\"rowhammer\" OR \"GPU side channel\" OR \"bit-flip attack\" OR \"GPU memory leak\" created:>{cutoff}" },
+      { "label": "汽车安全新星（近14天新建）", "q": "\"automotive security\" OR \"CAN security\" OR \"car hacking\" OR \"vehicle security\" created:>{cutoff}" },
+      { "label": "VLA/机器人安全新星（近14天新建）", "q": "\"vision-language-action\" OR \"VLA security\" OR \"robot security\" OR \"embodied AI\" created:>{cutoff}" }
     ],
     "active_searches": [
       { "label": "机密 AI（近7天活跃）", "q": "\"confidential computing\" OR \"confidential inference\" OR \"GPU TEE\" pushed:>{cutoff} LLM OR inference OR agent" },
       { "label": "TEE×Agent（近7天活跃）", "q": "\"TEE agent\" OR \"enclave agent\" OR \"agent attestation\" OR \"confidential agent\" pushed:>{cutoff}" },
-      { "label": "GPU 漏洞研究（近7天活跃）", "q": "\"rowhammer\" OR \"side channel\" pushed:>{cutoff} GPU OR LLM OR \"machine learning\"" }
+      { "label": "车载安全（近7天活跃）", "q": "\"automotive cybersecurity\" OR \"CAN injection\" OR \"ISO 21434\" OR \"safety island\" OR \"CANsec\" pushed:>{cutoff}" },
+      { "label": "具身智能安全（近7天活跃）", "q": "\"vision-language-action\" OR \"VLA attack\" OR \"robot security\" OR \"sensor spoofing\" pushed:>{cutoff}" },
+      { "label": "故障注入（近7天活跃）", "q": "\"fault injection\" OR \"voltage glitch\" OR \"laser fault\" pushed:>{cutoff} MCU OR automotive OR secure boot" }
     ]
   },
   "arxiv": {
-    "categories": ["cs.CR", "cs.AI", "cs.CL", "cs.AR"],
+    "categories": ["cs.CR", "cs.AI", "cs.CL", "cs.AR", "cs.RO", "eess.SY"],
     "days": 14,
-    "max_results": 40,
+    "max_results": 60,
     "terms": [
       "trusted execution environment", "confidential computing", "GPU TEE",
       "enclave LLM", "confidential inference", "remote attestation",
       "GPU side channel", "rowhammer", "bit-flip attack model",
-      "hardware root of trust", "confidential agent", "TEE agent",
-      "model weight integrity", "memory safety LLM", "secure enclave inference"
+      "hardware root of trust", "confidential agent",
+      "model weight integrity", "secure enclave inference",
+      "vision-language-action", "robot security", "adversarial robot",
+      "sensor spoofing", "LiDAR spoofing", "CAN bus security",
+      "automotive cybersecurity", "autonomous driving security",
+      "fault injection", "secure boot bypass", "keyless entry",
+      "physical adversarial attack", "embodied AI safety"
     ]
   },
   "rss": [
@@ -59,18 +75,24 @@
     { "name": "SecurityWeek", "url": "https://feeds.feedburner.com/securityweek" },
     { "name": "Schneier on Security", "url": "https://www.schneier.com/feed/" },
     { "name": "GoogleNews-硬件AI安全", "url": "https://news.google.com/rss/search?q=confidential+computing+AI+OR+TEE+LLM+OR+GPU+security+OR+enclave+agents&hl=en-US&gl=US&ceid=US:en" },
-    { "name": "GoogleNews-硬件漏洞", "url": "https://news.google.com/rss/search?q=GPU+vulnerability+OR+side+channel+OR+Rowhammer+OR+confidential+computing&hl=en-US&gl=US&ceid=US:en" }
+    { "name": "GoogleNews-硬件漏洞", "url": "https://news.google.com/rss/search?q=GPU+vulnerability+OR+side+channel+OR+Rowhammer+OR+confidential+computing&hl=en-US&gl=US&ceid=US:en" },
+    { "name": "GoogleNews-汽车网络安全", "url": "https://news.google.com/rss/search?q=automotive+cybersecurity+OR+car+hacking+OR+CAN+injection+OR+vehicle+vulnerability&hl=en-US&gl=US&ceid=US:en" },
+    { "name": "GoogleNews-具身智能机器人", "url": "https://news.google.com/rss/search?q=robot+security+OR+humanoid+robot+OR+embodied+AI+OR+vision-language-action&hl=en-US&gl=US&ceid=US:en" }
   ],
   "rss_days": 3,
   "conferences": [
-    { "name": "A Survey of Confidential Computing for Agentic AI", "url": "https://arxiv.org/html/2605.03213v1", "note": "该子领域首篇综述（2026-05），跟踪其引用网络" },
+    { "name": "A Survey of Confidential Computing for Agentic AI", "url": "https://arxiv.org/html/2605.03213v1", "note": "TEE×Agent 首篇综述（2026-05）" },
+    { "name": "VLA Safety 综述（具身智能安全）", "url": "https://arxiv.org/html/2604.23775v1", "note": "VLA 模型安全首篇综述（2026）" },
     { "name": "NVIDIA 机密计算（Hopper/Blackwell TEE-I/O）", "url": "https://www.nvidia.com/en-us/data-center/solutions/confidential-computing/", "note": "GPU TEE 工业标准，H100 CC 推理开销 4-8%" },
     { "name": "Apple Private Cloud Compute 安全指南", "url": "https://security.apple.com/documentation/private-cloud-compute", "note": "硬件信任根服务云端 AI 的标杆实现" },
-    { "name": "CCC：Agent 生产化安全架构", "url": "https://confidentialcomputing.io/2026/05/20/your-ai-agents-are-already-in-production-your-security-architecture-isnt-ready/", "note": "机密计算联盟对 Agent 场景的立场文件（2026-05）" },
-    { "name": "OWASP Agentic Top 10 (2026)", "url": "https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/", "note": "ASI01-ASI10：硬件抓手与之的映射见 docs/hardware-security.md" },
-    { "name": "Black Hat 2026：breaking GPU CC integrity", "url": "https://github.com/sungjungk/breaking-gpu-cc-integrity-blackhat26", "note": "攻破 GPU 机密计算请求-输入绑定完整性" },
-    { "name": "MITRE ATLAS", "url": "https://atlas.mitre.org/", "note": "含硬件侧 AI 攻击技术条目" },
-    { "name": "本方向调研基线文档", "url": "../docs/hardware-security.md", "note": "攻击面×硬件能力矩阵、局限与下注建议" }
+    { "name": "escar Europe 2026（车载安全会议）", "url": "https://escar.info/escar-europe", "note": "2026-11-17/18 波恩；车载安全最专业会议" },
+    { "name": "Three Glitches to Rule One Car（ASIA CCS 2025）", "url": "https://dl.acm.org/doi/10.1145/3708821.3710820", "note": "电压故障注入→secure boot 绕过→EV 控制完整链" },
+    { "name": "SoK: Stealing Cars Since RKE（偷车30年）", "url": "https://arxiv.org/html/2505.02713v1", "note": "无钥匙进入攻击体系化梳理" },
+    { "name": "Uptane 标准（抗妥协 OTA）", "url": "https://github.com/uptane/uptane-standard", "note": "车厂 OTA 安全基线" },
+    { "name": "CCC：Agent 生产化安全架构", "url": "https://confidentialcomputing.io/2026/05/20/your-ai-agents-are-already-in-production-your-security-architecture-isnt-ready/", "note": "机密计算联盟立场文件" },
+    { "name": "OWASP Agentic Top 10 (2026)", "url": "https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/", "note": "ASI01-ASI10：三轨风险映射基线" },
+    { "name": "MITRE ATLAS", "url": "https://atlas.mitre.org/", "note": "AI 系统攻击战术技术库" },
+    { "name": "本方向调研基线文档", "url": "../docs/embodied-auto-security.md", "note": "车载/具身第三轨调研与六个下注思路" }
   ],
   "keywords": {
     "TEE": 8, "trusted execution environment": 8, "enclave": 8, "confidential computing": 8,
@@ -81,13 +103,21 @@
     "memory": 4, "prompt injection": 5, "提示注入": 5, "LLM": 4, "agent": 4, "inference": 4,
     "model weights": 5, "权重": 4, "integrity": 5, "完整性": 5, "secret": 4, "key": 3,
     "NPU": 5, "secure element": 5, "CHERI": 6, "memory tagging": 6, "MTE": 5,
+    "vision-language-action": 8, "VLA": 7, "robot": 4, "机器人": 6, "具身": 7, "embodied": 7,
+    "CAN bus": 7, "CAN injection": 8, "ECU": 6, "automotive": 6, "汽车": 7, "vehicle": 5,
+    "AURIX": 8, "lockstep": 7, "ASIL": 8, "ISO 21434": 8, "R155": 7, "EVITA": 8,
+    "HSM": 7, "safety island": 8, "安全岛": 8, "fault injection": 8, "故障注入": 8,
+    "glitch": 6, "immobilizer": 7, "keyless": 7, "spoofing": 6, "sensor spoofing": 7,
+    "LiDAR": 6, "Uptane": 8, "OTA": 4, "V2X": 6, "AUTOSAR": 7, "ADAS": 6,
+    "autonomous driving": 5, "openpilot": 5, "物理": 5,
     "vulnerab": 2, "exploit": 2, "CVE": 3, "attack": 2, "leak": 4, "zero-day": 3
   },
   "tag_rules": {
     "机密计算": ["tee", "enclave", "confidential", "sgx", "tdx", "sev", "attestation", "pcc", "机密", "飞地"],
-    "侧信道攻击": ["side channel", "rowhammer", "timing", "power analysis", "侧信道", "leak", "bit-flip", "bit flip"],
+    "侧信道攻击": ["side channel", "rowhammer", "timing", "power analysis", "侧信道", "leak", "bit-flip", "bit flip", "glitch", "fault injection", "故障注入"],
+    "汽车/具身": ["automotive", "vehicle", "can bus", "ecu", "adas", "autonomous", "robot", "vla", "embodied", "汽车", "机器人", "具身", "lidar", "aurix", "asil", "uptane", "keyless", "safety island"],
     "Agent安全": ["agent", "prompt injection", "llm", "mcp", "guardrail", "提示注入", "智能体"],
-    "完整性": ["integrity", "tamper", "attestation", "weights", "度量", "完整性"],
-    "产业": ["nvidia", "apple", "azure", "google cloud", "launch", "release", "product", "benchmark"]
+    "完整性": ["integrity", "tamper", "attestation", "weights", "度量", "完整性", "secure boot"],
+    "产业": ["nvidia", "apple", "infineon", "nxp", "arm", "azure", "launch", "release", "product", "benchmark"]
   }
 }

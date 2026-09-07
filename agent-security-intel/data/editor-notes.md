@@ -1,7 +1,7 @@
-**2026-09-08（硬件抓手专题期）洞察：**
+**2026-09-08（三轨合并期）洞察：**
 
-1. **子领域已正式成形**：arXiv 2605.03213《A Survey of Confidential Computing for Agentic AI》（2026-05）是首篇专门综述，TEE 隔离 Agent 代码与数据已成独立研究方向；本周论文雷达继续验证该方向高产出（PRISM、TEE-X、GIFT 等）。
-2. **攻击面与防御面在硬件层正面对撞**：ROBBIN（Rowhammer 推理期后门注入）证明"物理层打模型权重"可行；JITterFlip 揭示 JIT 编译的 LLM 服务存在故障攻击面；而 NVIDIA Blackwell 机密计算基准显示防御侧开销持续下降——攻防两侧都值得跟踪。
-3. **GIFT 论文值得重点读**：用 GPU 信息流追踪（hardware taint tracking）在 LLM 服务中强制用户数据隔离——这是"硬件级提示注入遏制"从概念到系统的首个具体信号，此前我们认为该方向尚属未来。
-4. **Agent 专属 TEE 原型集中在 Web3 圈**：Dealproof（TEE 内 Agent 数据协商）、Confid-Intent-Tee（意图封装 SDK）、Phala/anda-cloud 等先行，但传统安全厂商尚未跟进——存在"搬运到企业级场景"的空窗机会。
-5. **局限要常记**：TEE 解决机密性/完整性/证明，不解决语义（注入意图、目标劫持）；Black Hat 2026 已演示 GPU CC 的请求-输入绑定完整性可被破坏——做防御必须同步跟踪攻击文献。
+1. **第三轨（车载/具身）并轨**：硬件抓手图谱补齐——TEE 保护计算过程（第二轨），安全 MCU/安全岛把权限边界推到物理执行（第三轨）；共同主线是"最小代理权（Least Agency）的硬件化"。
+2. **"安全岛 = VLA 的硬件护栏"是最值得做的交叉点**：AI 核输出动作先过 ASIL-D 安全岛的确定性校验（动作白名单/限幅/紧急停止）——语言层防不住的注入，物理层兜底；产业有部件、缺"VLA 动作契约"标准接口。
+3. **攻击侧证据充分**：ASIA CCS 2025《Three Glitches to Rule One Car》演示电压故障注入→secure boot 绕过→EV 控制完整链；CAN injection 偷车在北美激增；escar 2026 议题直言"ASIL-D ≠ 抗攻击"——lockstep 防随机故障，不防攻击者的确定性注入。
+4. **VLA 攻击研究 2025-2026 爆发**：BadVLA 后门（NeurIPS 2025）、对抗补丁让机器人"冻结"、LLM 越狱手法直接迁移夺取机器人控制权——LLM 注入偷数据，VLA 注入直接产生物理动作，风险等级质变。
+5. **产业信号**：AURIX TC4Dx 把后量子密码（PQC）搬上车载 MCU（15 年生命周期倒逼）；SDV 区域架构让安全岛从伴飞 MCU 变为 SoC 内集成块；Uptane 成为 OTA 安全基线；escar Europe 2026（11 月波恩）值得跟议程。
