@@ -113,3 +113,62 @@ def test_missing_task_404(client, admin, monkeypatch):
 
 def test_samba_requires_auth(client):
     assert client.get("/api/tools/samba/tasks").status_code == 401
+
+
+# ---------- 数据库状态记录 ----------
+
+def test_status_recorded_in_db(client, admin, monkeypatch):
+    _install_fake(monkeypatch)
+
+    # 建任务 → 镜像 + created 事件
+    client.post("/api/tools/samba/tasks", json={"name": "任务C"}, headers=admin)
+    mirror = client.get("/api/tools/samba/db/tasks", headers=admin).json()
+    row = mirror["items"][0]
+    assert row["task_name"] == "任务C" and row["done"] is False and row["files_count"] == 0
+
+    # 上传 → upload 事件（含文件名）
+    client.post(
+        "/api/tools/samba/tasks/任务C/files",
+        files={"file": ("f.txt", b"hello", "text/plain")},
+        headers=admin,
+    )
+    events = client.get("/api/tools/samba/db/events", params={"task": "任务C"}, headers=admin).json()
+    kinds = [e["event"] for e in reversed(events["items"])]
+    assert kinds[:2] == ["created", "upload"]
+    assert events["items"][0]["file"] == "f.txt" and events["items"][0]["username"] == "admin"
+
+    # 标记完成 → 镜像翻转为完成；取消 → 回落
+    client.post("/api/tools/samba/tasks/任务C/complete", headers=admin)
+    row = next(r for r in client.get("/api/tools/samba/db/tasks", headers=admin).json()["items"]
+               if r["task_name"] == "任务C")
+    assert row["done"] is True and row["complete_time"] and row["files_count"] == 1
+    client.delete("/api/tools/samba/tasks/任务C/complete", headers=admin)
+    row = next(r for r in client.get("/api/tools/samba/db/tasks", headers=admin).json()["items"]
+               if r["task_name"] == "任务C")
+    assert row["done"] is False and row["files_count"] == 1  # 文件计数不被清掉
+
+    # 事件流水完整
+    kinds = [e["event"] for e in reversed(
+        client.get("/api/tools/samba/db/events", params={"task": "任务C"}, headers=admin).json()["items"]
+    )]
+    assert kinds == ["created", "upload", "complete", "undo_complete"]
+
+
+def test_list_syncs_mirror(client, admin, monkeypatch):
+    _install_fake(monkeypatch)
+    client.post("/api/tools/samba/tasks", json={"name": "任务D"}, headers=admin)
+    client.post(
+        "/api/tools/samba/tasks/任务D/files",
+        files={"file": ("x.bin", b"12345", "application/octet-stream")},
+        headers=admin,
+    )
+    client.get("/api/tools/samba/tasks", headers=admin)  # 列表访问触发同步
+    row = next(r for r in client.get("/api/tools/samba/db/tasks", headers=admin).json()["items"]
+               if r["task_name"] == "任务D")
+    assert row["files_count"] == 1
+
+
+def test_samba_tables_visible_in_tools_info(client, admin):
+    tools = client.get("/api/tools", headers=admin).json()
+    samba = next(t for t in tools if t["name"] == "samba")
+    assert set(samba["tables"]) == {"samba_tasks", "samba_events"}

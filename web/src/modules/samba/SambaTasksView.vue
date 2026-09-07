@@ -16,6 +16,21 @@ const files = ref([])
 const fileList = ref([])
 const uploading = ref(false)
 
+// 数据库状态记录
+const events = ref([])
+const eventTask = ref('')
+const EVENT_LABELS = {
+  created: '创建任务', upload: '上传', download: '下载',
+  complete: '标记完成', undo_complete: '取消完成',
+}
+
+async function loadEvents() {
+  const { data } = await api.get('/tools/samba/db/events', {
+    params: { task: eventTask.value || undefined, limit: 100 },
+  })
+  events.value = data.items
+}
+
 async function load() {
   loading.value = true
   try {
@@ -25,6 +40,7 @@ async function load() {
     ])
     status.value = s.data
     items.value = t.data.items
+    loadEvents()
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '加载失败')
   } finally {
@@ -152,6 +168,27 @@ onMounted(load)
         </template>
       </el-table-column>
     </el-table>
+
+    <el-divider />
+    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px">
+      <h4 style="margin: 0">📖 任务状态记录（数据库留痕）</h4>
+      <el-select v-model="eventTask" clearable placeholder="全部任务" style="width: 220px" @change="loadEvents">
+        <el-option v-for="t in items" :key="t.name" :label="t.name" :value="t.name" />
+      </el-select>
+      <el-button @click="loadEvents">刷新</el-button>
+    </div>
+    <el-table :data="events" size="small" stripe>
+      <el-table-column prop="created_at" label="时间" width="160" />
+      <el-table-column prop="task_name" label="任务" min-width="150" />
+      <el-table-column label="操作" width="100">
+        <template #default="{ row }">{{ EVENT_LABELS[row.event] || row.event }}</template>
+      </el-table-column>
+      <el-table-column prop="file" label="文件" min-width="160">
+        <template #default="{ row }">{{ row.file || '—' }}</template>
+      </el-table-column>
+      <el-table-column prop="username" label="用户" width="110" />
+    </el-table>
+    <el-empty v-if="!events.length" description="暂无操作记录" :image-size="60" />
 
     <el-dialog v-model="createDialog" title="新建任务目录" width="420px">
       <el-input v-model="createForm.name" placeholder="任务名（不支持 / \ : * ? 等字符）" @keyup.enter="createTask" />
