@@ -1,0 +1,93 @@
+{
+  "report": {
+    "gh_min_score": 6,
+    "top_papers": 12,
+    "top_gh_new": 10,
+    "top_gh_watch": 15,
+    "top_news": 15,
+    "news_min_score": 6
+  },
+  "github": {
+    "watchlist": [
+      "NVIDIA/garak",
+      "microsoft/PyRIT",
+      "promptfoo/promptfoo",
+      "ethz-spylab/agentdojo",
+      "NVIDIA/SkillSpector",
+      "snyk/agent-scan",
+      "microsoft/agent-governance-toolkit",
+      "Tencent/AI-Infra-Guard",
+      "luckyPipewrench/pipelock",
+      "dmno-dev/varlock",
+      "webpro255/awesome-ai-agent-attacks",
+      "Phala-Network/hopper-llm-benchmark",
+      "tinfoilsh/cc-repro",
+      "sungjungk/breaking-gpu-cc-integrity-blackhat26",
+      "trailofbits/LeftoverLocalsRelease",
+      "kkoci/Dealproof",
+      "GitBodda/Confid-Intent-Tee",
+      "microsoft/agent-framework",
+      "langfuse/langfuse"
+    ],
+    "emerging_searches": [
+      { "label": "机密计算×LLM 新星（近14天新建）", "q": "\"confidential inference\" OR \"GPU TEE\" OR \"TEE agent\" OR \"confidential LLM\" OR \"enclave LLM\" created:>{cutoff}" },
+      { "label": "证明/信任根 新星（近14天新建）", "q": "\"remote attestation\" OR \"hardware root of trust\" OR \"measured boot\" created:>{cutoff} LLM OR agent OR AI" },
+      { "label": "GPU 攻击面新星（近14天新建）", "q": "\"rowhammer\" OR \"GPU side channel\" OR \"bit-flip attack\" OR \"GPU memory leak\" created:>{cutoff}" }
+    ],
+    "active_searches": [
+      { "label": "机密 AI（近7天活跃）", "q": "\"confidential computing\" OR \"confidential inference\" OR \"GPU TEE\" pushed:>{cutoff} LLM OR inference OR agent" },
+      { "label": "TEE×Agent（近7天活跃）", "q": "\"TEE agent\" OR \"enclave agent\" OR \"agent attestation\" OR \"confidential agent\" pushed:>{cutoff}" },
+      { "label": "GPU 漏洞研究（近7天活跃）", "q": "\"rowhammer\" OR \"side channel\" pushed:>{cutoff} GPU OR LLM OR \"machine learning\"" }
+    ]
+  },
+  "arxiv": {
+    "categories": ["cs.CR", "cs.AI", "cs.CL", "cs.AR"],
+    "days": 14,
+    "max_results": 40,
+    "terms": [
+      "trusted execution environment", "confidential computing", "GPU TEE",
+      "enclave LLM", "confidential inference", "remote attestation",
+      "GPU side channel", "rowhammer", "bit-flip attack model",
+      "hardware root of trust", "confidential agent", "TEE agent",
+      "model weight integrity", "memory safety LLM", "secure enclave inference"
+    ]
+  },
+  "rss": [
+    { "name": "The Hacker News", "url": "https://feeds.feedburner.com/TheHackersNews" },
+    { "name": "BleepingComputer", "url": "https://www.bleepingcomputer.com/feed/" },
+    { "name": "Dark Reading", "url": "https://www.darkreading.com/rss.xml" },
+    { "name": "SecurityWeek", "url": "https://feeds.feedburner.com/securityweek" },
+    { "name": "Schneier on Security", "url": "https://www.schneier.com/feed/" },
+    { "name": "GoogleNews-硬件AI安全", "url": "https://news.google.com/rss/search?q=confidential+computing+AI+OR+TEE+LLM+OR+GPU+security+OR+enclave+agents&hl=en-US&gl=US&ceid=US:en" },
+    { "name": "GoogleNews-硬件漏洞", "url": "https://news.google.com/rss/search?q=GPU+vulnerability+OR+side+channel+OR+Rowhammer+OR+confidential+computing&hl=en-US&gl=US&ceid=US:en" }
+  ],
+  "rss_days": 3,
+  "conferences": [
+    { "name": "A Survey of Confidential Computing for Agentic AI", "url": "https://arxiv.org/html/2605.03213v1", "note": "该子领域首篇综述（2026-05），跟踪其引用网络" },
+    { "name": "NVIDIA 机密计算（Hopper/Blackwell TEE-I/O）", "url": "https://www.nvidia.com/en-us/data-center/solutions/confidential-computing/", "note": "GPU TEE 工业标准，H100 CC 推理开销 4-8%" },
+    { "name": "Apple Private Cloud Compute 安全指南", "url": "https://security.apple.com/documentation/private-cloud-compute", "note": "硬件信任根服务云端 AI 的标杆实现" },
+    { "name": "CCC：Agent 生产化安全架构", "url": "https://confidentialcomputing.io/2026/05/20/your-ai-agents-are-already-in-production-your-security-architecture-isnt-ready/", "note": "机密计算联盟对 Agent 场景的立场文件（2026-05）" },
+    { "name": "OWASP Agentic Top 10 (2026)", "url": "https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/", "note": "ASI01-ASI10：硬件抓手与之的映射见 docs/hardware-security.md" },
+    { "name": "Black Hat 2026：breaking GPU CC integrity", "url": "https://github.com/sungjungk/breaking-gpu-cc-integrity-blackhat26", "note": "攻破 GPU 机密计算请求-输入绑定完整性" },
+    { "name": "MITRE ATLAS", "url": "https://atlas.mitre.org/", "note": "含硬件侧 AI 攻击技术条目" },
+    { "name": "本方向调研基线文档", "url": "../docs/hardware-security.md", "note": "攻击面×硬件能力矩阵、局限与下注建议" }
+  ],
+  "keywords": {
+    "TEE": 8, "trusted execution environment": 8, "enclave": 8, "confidential computing": 8,
+    "机密计算": 8, "飞地": 8, "可信执行": 8,
+    "attestation": 7, "remote attestation": 7, "证明": 6,
+    "GPU": 6, "side channel": 7, "侧信道": 7, "rowhammer": 8, "bit-flip": 7, "位翻转": 7,
+    "hardware root of trust": 7, "SGX": 7, "TDX": 7, "SEV-SNP": 7, "H100": 6, "Blackwell": 6,
+    "memory": 4, "prompt injection": 5, "提示注入": 5, "LLM": 4, "agent": 4, "inference": 4,
+    "model weights": 5, "权重": 4, "integrity": 5, "完整性": 5, "secret": 4, "key": 3,
+    "NPU": 5, "secure element": 5, "CHERI": 6, "memory tagging": 6, "MTE": 5,
+    "vulnerab": 2, "exploit": 2, "CVE": 3, "attack": 2, "leak": 4, "zero-day": 3
+  },
+  "tag_rules": {
+    "机密计算": ["tee", "enclave", "confidential", "sgx", "tdx", "sev", "attestation", "pcc", "机密", "飞地"],
+    "侧信道攻击": ["side channel", "rowhammer", "timing", "power analysis", "侧信道", "leak", "bit-flip", "bit flip"],
+    "Agent安全": ["agent", "prompt injection", "llm", "mcp", "guardrail", "提示注入", "智能体"],
+    "完整性": ["integrity", "tamper", "attestation", "weights", "度量", "完整性"],
+    "产业": ["nvidia", "apple", "azure", "google cloud", "launch", "release", "product", "benchmark"]
+  }
+}

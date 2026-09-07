@@ -1,0 +1,5 @@
+data/state.json
+data/latest-items.json
+__pycache__/
+*.pyc
+!config.json
