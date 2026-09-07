@@ -27,8 +27,9 @@ function logout() {
     <el-aside width="220px" class="aside">
       <div class="logo">🧰 超级小工具</div>
       <el-menu router :default-active="$route.path" class="menu">
+        <el-menu-item index="/home">🏠 欢迎首页</el-menu-item>
         <el-menu-item v-for="t in tools" :key="t.name" :index="`/t/${t.name}`">
-          {{ t.title }}
+          {{ t.icon }} {{ t.title }}
         </el-menu-item>
       </el-menu>
     </el-aside>

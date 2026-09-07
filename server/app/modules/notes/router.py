@@ -18,7 +18,10 @@ from .models import Note
 
 TOOL = {
     "title": "备忘录（示例工具）",
-    "importable": True,  # 为 True 时出现在管理面的“数据导入”里
+    "icon": "📝",
+    "desc": "最简单的增删改查示例，也是开发新工具的参考模板。",
+    "usage": "支持关键词搜索、新增、编辑、删除；「分类」是同一工具多张数据表的演示；管理面·数据管理可对表做导入导出。",
+    "importable": True,
     "tables": {"notes": "备忘录", "note_categories": "分类"},
 }
 

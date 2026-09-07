@@ -5,7 +5,13 @@ from ...auth import get_current_user
 from ...models import User
 from .data import CLASSES, REGISTERS
 
-TOOL = {"title": "ARM 寄存器查询", "importable": False}
+TOOL = {
+    "title": "ARM 寄存器查询",
+    "icon": "🔧",
+    "desc": "AArch64 常用寄存器速查：通用 / PSTATE / 系统寄存器 / 浮点NEON。",
+    "usage": "按名称、MRS编码或描述关键词搜索，按类别过滤；点击寄存器名或 MRS/MSR 示例即可复制到剪贴板。",
+    "importable": False,
+}
 
 router = APIRouter()
 

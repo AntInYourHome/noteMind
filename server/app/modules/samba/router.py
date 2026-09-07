@@ -20,6 +20,9 @@ from .models import SambaEvent, SambaTask
 
 TOOL = {
     "title": "Samba 任务目录",
+    "icon": "📂",
+    "desc": "Samba 共享任务目录：以 complete.txt 判定任务完成，支持文件上传下载。",
+    "usage": "新建任务目录 → 上传/下载文件 → 「标记完成」会写入 complete.txt；页面下方「任务状态记录」可查数据库留痕的操作流水。",
     "importable": False,
     "tables": {"samba_tasks": "Samba任务状态", "samba_events": "Samba操作事件"},
 }

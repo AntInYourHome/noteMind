@@ -38,6 +38,9 @@ def load_tools() -> list[dict]:
         meta = {
             "name": m.name,
             "title": tool_meta.get("title", m.name),
+            "icon": tool_meta.get("icon", "🧩"),
+            "desc": tool_meta.get("desc", ""),
+            "usage": tool_meta.get("usage", ""),
             "importable": bool(tool_meta.get("importable", False)),
         }
 
@@ -72,6 +75,9 @@ def tools_info() -> list[dict]:
         {
             "name": t["meta"]["name"],
             "title": t["meta"]["title"],
+            "icon": t["meta"]["icon"],
+            "desc": t["meta"]["desc"],
+            "usage": t["meta"]["usage"],
             "importable": t["meta"]["importable"],
             "tables": {name: tb["label"] for name, tb in t["meta"]["tables"].items()},
         }

@@ -10,7 +10,13 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from ...auth import get_current_user
 from ...models import User
 
-TOOL = {"title": "日志解析", "importable": False}
+TOOL = {
+    "title": "日志解析",
+    "icon": "📋",
+    "desc": "上传或粘贴日志，统计级别分布、时间范围，并自动聚类错误。",
+    "usage": "拖入 .log/.txt 文件（≤20MB）或粘贴文本 → 点「开始解析」；数字/IP/十六进制地址会被归一化后分组，快速定位高频错误。",
+    "importable": False,
+}
 
 router = APIRouter()
 

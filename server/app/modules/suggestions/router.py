@@ -16,6 +16,9 @@ from .models import Suggestion
 
 TOOL = {
     "title": "改进意见",
+    "icon": "💬",
+    "desc": "提交对平台的改进建议（最多100字）。",
+    "usage": "输入建议（仅中文/字母/数字/常见标点）→ 提交；「我的提交」可查历史；管理员在管理面·数据管理查看全部建议。",
     "importable": False,
     "tables": {"suggestions": "改进意见"},
 }

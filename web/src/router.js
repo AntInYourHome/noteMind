@@ -16,8 +16,9 @@ const router = createRouter({
       path: '/',
       component: MainLayout,
       children: [
+        { path: '', component: () => import('./views/HomeView.vue') },
+        { path: 'home', component: () => import('./views/HomeView.vue') },
         ...names.map((name) => ({ path: `t/${name}`, component: registry[name] })),
-        { path: '', redirect: () => (names[0] ? `/t/${names[0]}` : '/login') },
       ],
     },
     // 管理面：独立入口、独立登录，仅管理员

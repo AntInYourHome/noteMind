@@ -10,6 +10,9 @@ def test_tools_discovery(client, admin):
     assert EXPECTED_TOOLS <= names
     notes = next(t for t in r.json() if t["name"] == "notes")
     assert notes["tables"] == {"notes": "备忘录", "note_categories": "分类"}
+    # 欢迎首页依赖的元信息（icon/desc/usage）
+    for t in r.json():
+        assert t["icon"] and t["desc"] and t["usage"], t["name"]
 
 
 def test_tools_requires_auth(client):
