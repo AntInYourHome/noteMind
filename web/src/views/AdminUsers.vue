@@ -85,7 +85,14 @@ onMounted(load)
 
     <el-table :data="items" stripe>
       <el-table-column prop="id" label="ID" width="70" />
-      <el-table-column prop="username" label="用户名" min-width="160" />
+      <el-table-column label="用户名" min-width="150">
+        <template #default="{ row }">
+          <div>{{ row.username }}</div>
+          <div v-if="row.display_name || row.email" class="sub">
+            {{ [row.display_name, row.email].filter(Boolean).join(' · ') }}
+          </div>
+        </template>
+      </el-table-column>
       <el-table-column label="角色" width="110">
         <template #default="{ row }">
           <el-tag :type="row.is_admin ? 'danger' : 'info'">
@@ -93,10 +100,16 @@ onMounted(load)
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="来源" width="110">
+        <template #default="{ row }">
+          <el-tag v-if="row.oauth_provider" type="success" size="small">OAuth·{{ row.oauth_provider }}</el-tag>
+          <el-tag v-else type="info" size="small">本地</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="created_at" label="创建时间" width="180" />
       <el-table-column label="操作" width="260" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="openReset(row)">重置密码</el-button>
+          <el-button link type="primary" :disabled="!!row.oauth_provider" @click="openReset(row)">重置密码</el-button>
           <el-button link type="warning" @click="toggleAdmin(row)">
             {{ row.is_admin ? '撤销管理员' : '设为管理员' }}
           </el-button>
@@ -132,3 +145,7 @@ onMounted(load)
     </el-dialog>
   </el-card>
 </template>
+
+<style scoped>
+.sub { font-size: 12px; color: #909399; }
+</style>

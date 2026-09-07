@@ -5,3 +5,4 @@ pyjwt
 openpyxl
 python-multipart
 python-dotenv
+httpx

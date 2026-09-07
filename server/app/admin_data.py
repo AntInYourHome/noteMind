@@ -71,7 +71,7 @@ def create(
 def update(
     tool: str,
     table: str,
-    row_id,
+    row_id: int,
     data: dict = Body(..., embed=True),
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
@@ -83,7 +83,7 @@ def update(
 def remove(
     tool: str,
     table: str,
-    row_id,
+    row_id: int,
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):

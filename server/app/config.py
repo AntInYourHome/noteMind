@@ -16,3 +16,9 @@ TOKEN_EXPIRE_SECONDS = 86400
 STATIC_DIR = os.environ.get("STATIC_DIR", "")
 # 访问日志保留天数（老化清理）
 LOG_RETENTION_DAYS = int(os.environ.get("LOG_RETENTION_DAYS", "90"))
+
+# ---- OAuth 2.0（通用 IdP；oauth.py 运行时动态读取环境变量，便于热改）----
+# 认证模式：local=仅本地密码 | oauth=仅OAuth | mixed=两者都开
+# OAUTH_PROVIDER_NAME / OAUTH_AUTHORIZE_URL / OAUTH_TOKEN_URL / OAUTH_USERINFO_URL
+# OAUTH_CLIENT_ID / OAUTH_CLIENT_SECRET / OAUTH_SCOPE / OAUTH_REDIRECT_URI
+# OAUTH_USE_PKCE / OAUTH_ADMIN_GROUPS   —— 详见 docs/OAuth2.0接入设计.md

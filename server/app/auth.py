@@ -32,11 +32,12 @@ def verify_password(password: str, stored: str) -> bool:
         return False
 
 
-def make_token(user: User) -> str:
+def make_token(user: User, provider: str = "local") -> str:
     payload = {
         "uid": user.id,
         "username": user.username,
         "admin": user.is_admin,
+        "provider": provider,
         "exp": int(time.time()) + TOKEN_EXPIRE_SECONDS,
     }
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")

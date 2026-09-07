@@ -1,5 +1,7 @@
+import os
 import threading
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -8,7 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, inspect, text
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -24,6 +26,8 @@ from .auth import (
 from .config import LOG_RETENTION_DAYS, STATIC_DIR
 from .db import Base, SessionLocal, engine, get_db
 from .models import AccessLog, User
+from .oauth import clean_expired_states
+from .oauth import router as oauth_router
 from .registry import load_tools, tools_info
 
 
@@ -53,6 +57,9 @@ def _user_brief(user: User) -> dict:
         "username": user.username,
         "is_admin": user.is_admin,
         "created_at": user.created_at,
+        "oauth_provider": user.oauth_provider,
+        "email": user.email,
+        "display_name": user.display_name,
     }
 
 
@@ -65,6 +72,7 @@ def init_db():
     # 模块导入会触发各工具 models 的注册
     load_tools()
     Base.metadata.create_all(engine)
+    _migrate()
     with SessionLocal() as db:
         if db.query(User).count() == 0:
             db.add(
@@ -77,7 +85,42 @@ def init_db():
             db.commit()
 
 
-app = FastAPI(title="超级小工具平台")
+def _migrate():
+    """轻量启动迁移：为既有 users 表补 OAuth 列与唯一索引（全新库由 create_all 覆盖）。"""
+    insp = inspect(engine)
+    if not insp.has_table("users"):
+        return
+    cols = {c["name"] for c in insp.get_columns("users")}
+    add_columns = {
+        "oauth_provider": "VARCHAR(32)",
+        "oauth_sub": "VARCHAR(128)",
+        "email": "VARCHAR(128)",
+        "display_name": "VARCHAR(64)",
+    }
+    with engine.begin() as conn:
+        for col, ddl_type in add_columns.items():
+            if col not in cols:
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {ddl_type}"))
+        index_names = {i["name"] for i in insp.get_indexes("users")}
+        if "uq_users_oauth" not in index_names:
+            conn.execute(
+                text("CREATE UNIQUE INDEX uq_users_oauth ON users(oauth_provider, oauth_sub)")
+            )
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    for _ in range(30):
+        try:
+            init_db()
+            break
+        except Exception:
+            time.sleep(2)
+    threading.Thread(target=_retention_loop, daemon=True).start()
+    yield
+
+
+app = FastAPI(title="超级小工具平台", lifespan=lifespan)
 _START_TIME = time.time()
 
 app.add_middleware(
@@ -125,7 +168,7 @@ async def access_log_middleware(request, call_next):
 
 
 def _retention_loop():
-    """日志老化：每 6 小时清理一次超期访问日志。"""
+    """日志与 OAuth state 老化：每 6 小时清理一次。"""
     while True:
         try:
             cutoff = datetime.now() - timedelta(days=LOG_RETENTION_DAYS)
@@ -134,24 +177,16 @@ def _retention_loop():
                     synchronize_session=False
                 )
                 db.commit()
+            clean_expired_states(keep_minutes=60)
         except Exception:
             pass
         time.sleep(6 * 3600)
 
 
-@app.on_event("startup")
-def startup():
-    for _ in range(30):
-        try:
-            init_db()
-            break
-        except Exception:
-            time.sleep(2)
-    threading.Thread(target=_retention_loop, daemon=True).start()
-
-
 @app.post("/api/auth/login")
 def login(body: LoginIn, db: Session = Depends(get_db)):
+    if os.environ.get("AUTH_MODE", "mixed") == "oauth":
+        raise HTTPException(403, "已切换统一认证，请使用 OAuth 登录")
     user = db.query(User).filter(User.username == body.username).first()
     if not user or not verify_password(body.password, user.pass_hash):
         raise HTTPException(401, "用户名或密码错误")
@@ -184,6 +219,9 @@ def change_password(
 @app.get("/api/tools")
 def list_tools(user: User = Depends(get_current_user)):
     return tools_info()
+
+
+app.include_router(oauth_router)
 
 
 @app.get("/api/admin/stats")
@@ -330,6 +368,8 @@ def admin_reset_password(
     user = db.get(User, uid)
     if not user:
         raise HTTPException(404, "用户不存在")
+    if user.oauth_provider:
+        raise HTTPException(400, "OAuth 用户无本地密码，不支持重置")
     if len(body.new_password) < 6:
         raise HTTPException(400, "密码至少 6 位")
     user.pass_hash = hash_password(body.new_password)

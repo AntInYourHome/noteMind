@@ -10,6 +10,8 @@ const router = createRouter({
   routes: [
     // 业务面：工具门户
     { path: '/login', component: () => import('./views/Login.vue') },
+    // OAuth 回调落点（公开路由，拿到 token 后再跳目标页）
+    { path: '/oauth/done', component: () => import('./views/OAuthDone.vue') },
     {
       path: '/',
       component: MainLayout,
@@ -37,6 +39,8 @@ const router = createRouter({
 const isAdminPath = (p) => p === '/admin' || p.startsWith('/admin')
 
 router.beforeEach((to) => {
+  // OAuth 回调页本身放行（它自己处理 token/错误）
+  if (to.path === '/oauth/done') return true
   const hasToken = !!localStorage.getItem('token')
   const user = JSON.parse(localStorage.getItem('user') || 'null')
 
