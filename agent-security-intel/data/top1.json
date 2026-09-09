@@ -1,0 +1,69 @@
+{
+ "kind": "paper",
+ "title": "Seeing is Not Believing: Breaking the Physical-to-Digital Trust Boundary in Robotics",
+ "url": "http://arxiv.org/abs/2609.08280v1",
+ "date": "2026-09-08",
+ "cats": "cs.RO,cs.CR",
+ "desc": "In multi-robot collaboration, task handovers rely on downstream verifiers performing remote attestation, which inspects sensor telemetry to ensure a robot's physical behavior strictly matches its assigned task. But can this telemetry be trusted? We show that i",
+ "score": 49,
+ "hits": [
+  "attestation",
+  "remote attestation",
+  "integrity",
+  "robot",
+  "ECU",
+  "ASIL"
+ ],
+ "tags": [
+  "机密计算",
+  "汽车/具身",
+  "完整性",
+  "产业"
+ ],
+ "detail": {
+  "fetched": "作者: Leming Shen, Shikai Geng, Yuanqing Zheng, Chris Xiaoxuan Lu\n\n完整摘要: In multi-robot collaboration, task handovers rely on downstream verifiers performing remote attestation, which inspects sensor telemetry to ensure a robot's physical behavior strictly matches its assigned task. But can this telemetry be trusted? We show that it often cannot. In this paper, we uncover a severe vulnerability in Robot Operating System (ROS) 2: by modifying a single environment variable, an adversary can execute a pre-built hook to covertly intercept and inject both telemetry and control signals before they are published. Consequently, adversaries can hijack a robot to perform dangerous tasks while spoofing downstream verifiers with synthesized fake telemetry. Worse still, by exploiting the widespread reliance on third-party Docker containers and auxiliary tools, attackers can distribute compromised packages embedded with these malicious hooks to launch such attacks easily. On a physical Franka Emika robotic arm running Secure ROS 2, our attack injects fabricated telemetry in real time with only around 3 ms of jitter, preserving temporal synchronization and hardware integrity while achieving an 87% success rate even against an AI-based detector. We have responsibly disclosed these findings to the ROS 2 development team. We prepared a demo video available at https://youtu.be/ExeiGqUrnhQ.",
+  "source_type": "paper"
+ },
+ "runner_ups": [
+  {
+   "kind": "paper",
+   "title": "LIBERO-RECOVER: Beyond Task Success Towards Failure Recovery in Robotic Manipulation Models",
+   "url": "http://arxiv.org/abs/2609.05178v1",
+   "date": "2026-09-04",
+   "score": 50,
+   "tags": [
+    "Agent安全",
+    "汽车/具身",
+    "产业"
+   ],
+   "desc": "Vision-Language-Action (VLA) or World Action (WAM) models have recently demonstrated remarkable performance in robotic manipulation. On LIBERO, SOTA method have achieved nearly 100\\% success rates, seemingly suggesting that the models are ready for deployment "
+  },
+  {
+   "kind": "paper",
+   "title": "AlcaTRAz - Anchored Tree-Rule Defense Against Jailbreaks",
+   "url": "http://arxiv.org/abs/2609.03693v1",
+   "date": "2026-09-03",
+   "score": 42,
+   "tags": [
+    "Agent安全",
+    "机密计算",
+    "汽车/具身",
+    "完整性",
+    "产业"
+   ],
+   "desc": "Large language models (LLMs) are vulnerable to jailbreak attacks that bypass safety alignment through carefully crafted prompts. Many existing defenses require access to model weights or internals, making them difficult to apply to black-box deployments. We pr"
+  },
+  {
+   "kind": "paper",
+   "title": "Continuous Actions from Discrete Minds: Latent-Aligned Planning for End-to-End Autonomous Driving",
+   "url": "http://arxiv.org/abs/2609.04070v1",
+   "date": "2026-09-03",
+   "score": 50,
+   "tags": [
+    "汽车/具身",
+    "产业"
+   ],
+   "desc": "Bridging the gap between the discrete reasoning of Vision-Language Models and the continuous, physics-constrained nature of autonomous driving remains a significant challenge. In this work, we introduce LaPla, a unified Vision-Language-Action (VLA) framework f"
+  }
+ ]
+}
