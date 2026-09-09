@@ -290,7 +290,9 @@ def collect_rss(statuses):
                 link = re.sub(r"\?oc=5$", "", link)
                 pub = it.findtext("pubDate") or it.findtext("{http://www.w3.org/2005/Atom}published") or ""
                 try:
-                    dt = datetime.strptime(pub.replace("+0000", "").strip(), "%a, %d %b %Y %H:%M:%S")
+                    # 剥离 RFC 822 时区后缀（GMT/UTC/+0000 等），仅保留本地解析可行的部分
+                    pub_local = re.sub(r"\s*(GMT|UTC|Z|[+-]\d{2}:?\d{2}|[+-]\d{4})\s*$", "", pub.strip())
+                    dt = datetime.strptime(pub_local, "%a, %d %b %Y %H:%M:%S")
                 except Exception:
                     try:
                         dt = datetime.fromisoformat(pub.replace("Z", "").strip()[:19])
