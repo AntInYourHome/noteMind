@@ -8,6 +8,16 @@
     "news_min_score": 6,
     "top_deep": 12
   },
+  "venues": {
+    "min_score": 6,
+    "top_show": 10,
+    "pages": [
+      { "name": "IEEE S&P 2026", "url": "https://sp2026.ieee-security.org/accepted-papers.html", "parser": "list_group" },
+      { "name": "IEEE S&P 2027", "url": "https://sp2027.ieee-security.org/accepted-papers.html", "parser": "list_group" },
+      { "name": "NDSS 2027", "url": "https://www.ndss-symposium.org/ndss2027/accepted-papers/", "parser": "single_paper" },
+      { "name": "USENIX Security 2026", "url": "https://www.usenix.org/conference/usenixsecurity26/technical-sessions", "parser": "list_group", "enabled": false, "note": "议程页结构复杂暂未接入；接收信号由 arXiv comment 通道覆盖" }
+    ]
+  },
   "deep_read": {
     "p2_weekday": 0,
     "repos": [
@@ -138,6 +148,10 @@
     { "name": "escar Europe 2026（车载安全会议）", "url": "https://escar.info/escar-europe", "note": "L4 最专业会议，2026-11 波恩" },
     { "name": "Trusted Firmware 项目（TF-A/TF-M/OP-TEE）", "url": "https://www.trustedfirmware.org/", "note": "安全MCU抓手：开源可信固件基线" },
     { "name": "MCUboot 文档", "url": "https://docs.mcuboot.com/", "note": "MCU 安全启动事实标准" },
+    { "name": "IEEE S&P（安全四大顶会）", "url": "https://sp2027.ieee-security.org/", "note": "Big 4 学术顶会：AI 安全/TEE/故障注入主阵地" },
+    { "name": "ACM CCS（安全四大顶会）", "url": "https://www.sigsac.org/ccs.html", "note": "接收信号经 arXiv comment 通道跟踪" },
+    { "name": "USENIX Security（安全四大顶会）", "url": "https://www.usenix.org/conference/usenixsecurity27", "note": "Agent 安全/机密计算论文高产地" },
+    { "name": "NDSS（安全四大顶会）", "url": "https://www.ndss-symposium.org/", "note": "2027 接收列表已纳入顶会雷达" },
     { "name": "Three Glitches to Rule One Car（ASIA CCS 2025）", "url": "https://dl.acm.org/doi/10.1145/3708821.3710820", "note": "L3→L4 完整攻击链样本" },
     { "name": "Uptane 标准（抗妥协 OTA）", "url": "https://github.com/uptane/uptane-standard", "note": "L4 供应链证明基线" },
     { "name": "CCC：Agent 生产化安全架构", "url": "https://confidentialcomputing.io/2026/05/20/your-ai-agents-are-already-in-production-your-security-architecture-isnt-ready/", "note": "L3 产业联盟对 L2 的回应" },
@@ -174,7 +188,8 @@
     "ISO 26262": 8, "security MCU": 8, "secure MCU": 8, "MCUboot": 8, "secure boot": 7,
     "TF-M": 7, "Trusted Firmware": 6, "TrustZone": 6, "OP-TEE": 7, "optee": 5,
     "PSA Certified": 7, "SESIP": 7, "CC EAL": 6, "RH850": 7, "S32K": 7,
-    "ChipWhisperer": 7, "Zephyr": 5, "VLA safety": 8, "keystone enclave": 6
+    "ChipWhisperer": 7, "Zephyr": 5, "VLA safety": 8, "keystone enclave": 6,
+    "USENIX Security": 7, "IEEE S&P": 7, "Oakland": 6, "ACM CCS": 7, "NDSS": 7
   },
   "tag_rules": {
     "AgentOS": ["mcp", "agentos", "harness", "skill", "sandbox", "guardrail", "a2a", "tool call", "agent framework"],

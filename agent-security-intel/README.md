@@ -56,16 +56,17 @@ agent-security-intel/
 ## 报告结构
 
 1. **⚡ 今日速览** — 按相关度自动挑选的 Top 条目
-2. **🏆 每日 Top1** — 自动评选当日最重要条目（相关度+跨层加成+新信号优先），预取原文材料（arXiv 完整摘要/GitHub README/新闻正文，存 `data/top1.json`），由分析师/自动化做深度打开分析（是什么/技术机制/证据强度/四层定位/影响与对策）
-3. **📄 论文雷达** — arXiv 近 14 天，关键词加权排序
-3. **🌱 GitHub 新星** — 近 14 天新建仓库，安全相关优先
-4. **🔥 GitHub 活跃** — 近 7 天活跃存量项目
-5. **⭐ Watchlist 动态** — 23 个成熟项目（promptfoo/garak/PyRIT/SkillSpector/agent-scan…）星增排序
-6. **📖 经典项目精读** — P0×5（安全MCU/TEE/故障注入/具身执行）+ P1×7（Agent 安全经典与标准）每日增量精读，P2×4 每周一；数据层走 GitHub Atom feed（无 API 配额），无动态自动静默
-7. **🛰️ 安全资讯** — 12 个 RSS 源 + Google News，相关度≥阈值
-8. **🎪 会议·框架·产业** — OWASP ASI Top 10、MITRE ATLAS、Black Hat、DEF CON AI Village
-9. **📈 趋势信号** — 热词频次 + 与上一期对比的升降
-10. **🧠 分析师点评** — 自动化流水线写入 `data/analysis.json` 后经 `--apply-analysis` 幂等填充
+2. **🏆 每日 Top1** — 自动评选当日最重要条目（相关度+跨层加成+顶会信号优先），预取原文材料（arXiv 完整摘要/GitHub README/新闻正文，存 `data/top1.json`），由分析师/自动化做深度打开分析（是什么/技术机制/证据强度/四层定位/影响与对策）
+3. **📄 论文雷达** — arXiv 近 14 天，关键词加权排序；comment 含四大顶会接收信号的条目 🏆 标记 + 加权
+4. **🏆 顶会雷达** — IEEE S&P / ACM CCS / USENIX Security / NDSS 接收列表增量监控（S&P/NDSS 官网页面 + arXiv comment 双通道），同行评审信号参与 Top 评选
+5. **🌱 GitHub 新星** — 近 14 天新建仓库，安全相关优先
+6. **🔥 GitHub 活跃** — 近 7 天活跃存量项目
+7. **⭐ Watchlist 动态** — 成熟项目星增排序
+8. **📖 经典项目精读** — P0×5（安全MCU/TEE/故障注入/具身执行）+ P1×7（Agent 安全经典与标准）每日增量精读，P2×4 每周一；数据层走 GitHub Atom feed（无 API 配额），无动态自动静默
+9. **🛰️ 安全资讯** — 12 个 RSS 源 + Google News，相关度≥阈值
+10. **🎪 会议·框架·产业** — OWASP ASI Top 10、MITRE ATLAS、Black Hat、DEF CON AI Village
+11. **📈 趋势信号** — 热词频次 + 与上一期对比的升降
+12. **🧠 分析师点评** — 自动化流水线写入 `data/analysis.json` 后经 `--apply-analysis` 幂等填充
 
 ## 数据源机制（避坑说明）
 

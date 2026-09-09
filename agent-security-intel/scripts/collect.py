@@ -189,7 +189,24 @@ def collect_github(state, statuses, cutoff_days=14):
     return new_items, active_items, watch_items
 
 
-ARXIV_NS = {"a": "http://www.w3.org/2005/Atom"}
+ARXIV_NS = {"a": "http://www.w3.org/2005/Atom",
+            "arxiv": "http://arxiv.org/schemas/atom"}
+# 四大安全顶会信号：arXiv comment 字段常写 "Accepted at USENIX Security 2027" 等
+VENUE_RE = re.compile(
+    r"(USENIX\s+Security|IEEE\s+S(&amp;|&)\s*P|S(&amp;|&)\s*P\s*'?2\d|Oakland|ACM\s+CCS|\bCCS\s*'?2\d|\bNDSS\b)",
+    re.I)
+VENUE_BONUS = 10  # 同行评审接收信号加成
+
+
+def venue_match(text):
+    m = VENUE_RE.search(text or "")
+    if not m:
+        return ""
+    s = m.group(0).replace("&amp;", "&")
+    for short, full in [("S&P", "IEEE S&P"), ("Oakland", "IEEE S&P"), ("CCS", "ACM CCS")]:
+        if short in s:
+            return full
+    return s
 
 
 def collect_arxiv(statuses):
@@ -218,18 +235,31 @@ def collect_arxiv(statuses):
             break
     try:
         if root is not None:
+            n_venue = 0
             for e in root.findall("a:entry", ARXIV_NS):
                 title = re.sub(r"\s+", " ", e.findtext("a:title", "", ARXIV_NS)).strip()
                 summary = re.sub(r"\s+", " ", e.findtext("a:summary", "", ARXIV_NS)).strip()
+                comment = re.sub(r"\s+", " ", e.findtext("arxiv:comment", "", ARXIV_NS) or "").strip()
                 pub = e.findtext("a:published", "", ARXIV_NS)[:10]
                 link = e.findtext("a:id", "", ARXIV_NS)
                 cats = [c.attrib.get("term", "") for c in e.findall("a:category", ARXIV_NS)]
                 text = title + " " + summary
                 score, hits = score_text(text)
+                tags = tag_text(text)
+                venue = venue_match(comment + " " + title)
+                if venue:
+                    score += VENUE_BONUS
+                    n_venue += 1
+                    if "顶会" not in tags:
+                        tags.append("顶会")
                 items.append({"kind": "paper", "title": title, "url": link, "date": pub,
-                              "cats": ",".join(cats[:3]), "desc": summary[:260],
-                              "score": score, "hits": hits[:6], "tags": tag_text(text)})
-            statuses.append(source_status("OK (%d条)" % len(items), "arXiv"))
+                              "cats": ",".join(cats[:3]),
+                              "desc": (("🏆 %s｜" % venue) if venue else "") + summary[:260],
+                              "score": score, "hits": hits[:6], "tags": tags,
+                              "venue": venue})
+            statuses.append(source_status(
+                "OK (%d条，四大顶会标记%d条)" % (len(items), n_venue)
+                if n_venue else "OK (%d条)" % len(items), "arXiv"))
         else:
             statuses.append(source_status("FAIL: 多次重试后仍失败（arXiv 限流）", "arXiv"))
     except Exception as e:
@@ -281,6 +311,83 @@ def collect_rss(statuses):
         except Exception as e:
             statuses_list.append(source_status("FAIL: " + str(e)[:50], feed["name"]))
     statuses.extend(statuses_list)
+    items.sort(key=lambda x: -x["score"])
+    return items
+
+
+# ---------------------------------------------------------------- venues (Big 4)
+def collect_venues(state, statuses, today):
+    """四大安全顶会（IEEE S&P / ACM CCS / USENIX Security / NDSS）接收列表监控。
+    拉取官网 accepted-papers 页面抽取论文标题，state 去重只报新增（首跑建基准）。
+    CCS/USENIX 的接收信号由 arXiv comment 通道覆盖（collect_arxiv 的 VENUE_RE）。"""
+    v_cfg = CFG.get("venues") or {}
+    pages = [p for p in v_cfg.get("pages", []) if p.get("enabled", True)]
+    if not pages:
+        return []
+    base = state.setdefault("venues", {})
+    seen = base.setdefault("seen", {})
+    min_score = v_cfg.get("min_score", 6)
+    items = []
+
+    def parse_titles(html, parser):
+        titles = []
+        if parser == "single_paper":  # NDSS：single-paper 容器，标题与作者以 3+ 空格分隔
+            for block in re.split(r'class="[^"]*single-paper[^"]*"', html)[1:]:
+                chunk = block.split("<p class=")[0]
+                text = re.sub(r"\s{3,}", " ║ ", strip_html(chunk)).strip(" ║")
+                first = text.split("║")[0].strip().lstrip(">").strip()
+                if 15 <= len(first) <= 200:
+                    titles.append(first)
+        elif parser == "list_group":  # IEEE S&P：list-group-item 条目
+            for m in re.finditer(r'class="list-group-item[^"]*"[^>]*>(.{15,400}?)</(?:li|div|a)>', html, re.S):
+                text = strip_html(m.group(1)).strip()
+                if 15 <= len(text) <= 200:
+                    titles.append(text)
+        return titles
+
+    for page in pages:
+        try:
+            html = http_get(page["url"], timeout=25).decode("utf-8", "replace")
+        except Exception as e:
+            statuses.append(source_status("FAIL: %s" % str(e)[:50], "顶会雷达:" + page["name"]))
+            continue
+        titles = parse_titles(html, page["parser"])
+        if not titles:
+            statuses.append(source_status("OK (0条·解析为空或列表未公布)", "顶会雷达:" + page["name"]))
+            continue
+        first_run = not seen.get(page["name"] + "|init")
+        fresh = []
+        for t in titles:
+            key = page["name"] + "|" + t[:120]
+            if key in seen:
+                continue
+            seen[key] = today
+            fresh.append(t)
+        seen[page["name"] + "|init"] = True
+        if first_run:
+            statuses.append(source_status(
+                "OK (基线建立：%d篇，此后只报新增)" % len(titles), "顶会雷达:" + page["name"]))
+            continue
+        n_new = n_kept = 0
+        for t in fresh:
+            score, hits = score_text(t)
+            tags = tag_text(t)
+            if "顶会" not in tags:
+                tags.append("顶会")
+            if score >= min_score:
+                items.append({"kind": "venue", "title": t,
+                              "url": page["url"], "date": today,
+                              "desc": "新进入 %s 接收列表（同行评审信号）" % page["name"],
+                              "score": score + VENUE_BONUS, "hits": hits[:6], "tags": tags,
+                              "venue": page["name"]})
+                n_kept += 1
+            n_new += 1
+        statuses.append(source_status(
+            "OK (新增%d篇，%d篇过相关度线)" % (n_new, n_kept), "顶会雷达:" + page["name"]))
+    # seen 容量控制
+    if len(seen) > 3000:
+        for k in sorted(seen, key=seen.get)[:len(seen) - 2000]:
+            seen.pop(k, None)
     items.sort(key=lambda x: -x["score"])
     return items
 
@@ -477,6 +584,7 @@ def rank_candidates(items_by_key):
             cross = len([t for t in it.get("tags", []) if t != "综合"])
             prio = (it.get("score", 0) + 4 * max(0, cross - 1)
                     + (3 if it.get("kind") == "paper" else 0)
+                    + (3 if it.get("kind") == "venue" else 0)  # 顶会接收=同行评审信号
                     + (2 if it.get("kind") == "gh_new" else 0))
             cands.append((prio, it))
     cands.sort(key=lambda x: -x[0])
@@ -526,7 +634,7 @@ def fetch_detail(item):
 # ---------------------------------------------------------------- report
 def fmt_item(it, mark_new, idx):
     icon = {"paper": "📄", "gh_new": "🌱", "gh_active": "🔥", "gh_watch": "⭐",
-            "news": "🛰️", "deep_read": "📖"}.get(it.get("kind"), "•")
+            "news": "🛰️", "deep_read": "📖", "venue": "🏆"}.get(it.get("kind"), "•")
     tags = "/".join(it.get("tags", [])[:2])
     head = "%d. %s %s[%s] %s" % (idx, icon, "🆕 " if mark_new else "", tags, it["title"])
     meta = []
@@ -561,8 +669,8 @@ def fmt_item(it, mark_new, idx):
 
 def build_report(items_by_key, statuses, state, today, top1=None, ranked=None, deep_stats=None):
     R = CFG["report"]
-    papers, gh_new, gh_active, gh_watch, news, deep = (items_by_key[k] for k in
-                                                       ["paper", "gh_new", "gh_active", "gh_watch", "news", "deep_read"])
+    papers, gh_new, gh_active, gh_watch, news, deep, venues = (items_by_key[k] for k in
+        ["paper", "gh_new", "gh_active", "gh_watch", "news", "deep_read", "venue"])
     seen = state.setdefault("seen", {})
     def is_new(it):
         return it.get("url") and it["url"] not in seen
@@ -591,7 +699,9 @@ def build_report(items_by_key, statuses, state, today, top1=None, ranked=None, d
     ok_cnt = sum(1 for s in statuses if s["status"].startswith("OK"))
     L.append("| 维度 | 今日条目 | 说明 |")
     L.append("|---|---|---|")
-    L.append("| 📄 论文雷达 | %d | arXiv 近 %d 天，按相关度排序 |" % (len(papers), CFG["arxiv"]["days"]))
+    L.append("| 📄 论文雷达 | %d | arXiv 近 %d 天，按相关度排序（comment 含顶会接收标记 🏆） |" % (len(papers), CFG["arxiv"]["days"]))
+    venue_show = venues[:CFG.get("venues", {}).get("top_show", 10)]
+    L.append("| 🏆 顶会雷达 | %d/%d | Big 4 接收列表增量（同行评审信号） |" % (len(venue_show), len(venues)))
     L.append("| 🌱 GitHub 新星 | %d/%d | 近 14 天新建，优先展示安全相关 |" % (len(gh_new_show), len(gh_new)))
     L.append("| 🔥 GitHub 活跃 | %d/%d | 近 7 天活跃，优先展示安全相关 |" % (len(gh_active_show), len(gh_active)))
     L.append("| ⭐ Watchlist | %d/%d | 成熟项目星标/更新动态 |" % (len(gh_watch_ok), len(CFG["github"]["watchlist"])))
@@ -655,6 +765,18 @@ def build_report(items_by_key, statuses, state, today, top1=None, ranked=None, d
         L.append("")
     if not papers:
         L.append("- 无。")
+        L.append("")
+
+    # venues (Big 4 accepted papers)
+    L.append("## 🏆 顶会雷达（IEEE S&P / ACM CCS / USENIX Security / NDSS）")
+    L.append("")
+    L.append("> 双通道：官网接收列表增量监控（S&P/NDSS）+ arXiv comment 接收信号（四大全覆盖，见论文雷达 🏆 标记）。接收=同行评审通过，证据强度高于 arXiv v1。")
+    L.append("")
+    for i, it in enumerate(venue_show, 1):
+        L.append(fmt_item(it, is_new(it), i))
+        L.append("")
+    if not venue_show:
+        L.append("- 本期四大顶会接收列表无新增（列表每年集中公布数次，静默属常态）。")
         L.append("")
 
     # github new
@@ -836,6 +958,7 @@ def main():
     parser.add_argument("--skip-arxiv", action="store_true")
     parser.add_argument("--skip-rss", action="store_true")
     parser.add_argument("--skip-deep", action="store_true", help="跳过经典项目精读")
+    parser.add_argument("--skip-venues", action="store_true", help="跳过四大顶会雷达")
     parser.add_argument("--json-only", action="store_true", help="只导出 JSON，不写报告")
     parser.add_argument("--apply-analysis", metavar="FILE",
                         help="把 LLM 分析 JSON（top1_analysis/top3_briefs/editor_notes）填入今日报告后退出")
@@ -852,7 +975,7 @@ def main():
 
     state = load_state()
     statuses = []
-    papers, gh_new, gh_active, gh_watch, news, deep_items = [], [], [], [], [], []
+    papers, gh_new, gh_active, gh_watch, news, deep_items, venue_items = [], [], [], [], [], [], []
     deep_stats = None
 
     if not args.skip_gh:
@@ -878,9 +1001,14 @@ def main():
         deep_items, deep_stats = collect_deep_read(state, statuses, args.date)
     else:
         statuses.append(source_status("SKIP", "经典项目精读"))
+    if not args.skip_venues:
+        venue_items = collect_venues(state, statuses, args.date)
+    else:
+        statuses.append(source_status("SKIP", "四大顶会雷达"))
 
     items_by_key = {"paper": papers, "gh_new": gh_new, "gh_active": gh_active,
-                    "gh_watch": gh_watch, "news": news, "deep_read": deep_items}
+                    "gh_watch": gh_watch, "news": news, "deep_read": deep_items,
+                    "venue": venue_items}
     all_items = [it for g in items_by_key.values() for it in g]
 
     # Top1 评选与原文预取（预取材料存 data/top1.json，供分析师/LLM 深度分析）
@@ -935,8 +1063,8 @@ def main():
     save_state(state)
 
     print("report -> %s" % report_path)
-    print("items: papers=%d gh_new=%d gh_active=%d watch=%d news=%d deep_read=%d"
-          % (len(papers), len(gh_new), len(gh_active), len(gh_watch), len(news), len(deep_items)))
+    print("items: papers=%d gh_new=%d gh_active=%d watch=%d news=%d deep_read=%d venues=%d"
+          % (len(papers), len(gh_new), len(gh_active), len(gh_watch), len(news), len(deep_items), len(venue_items)))
     for s in statuses:
         print("  [%s] %s" % (s["status"], s["name"]))
 
