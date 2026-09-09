@@ -20,6 +20,7 @@
   "完整性",
   "产业"
  ],
+ "venue": "",
  "detail": {
   "fetched": "作者: Leming Shen, Shikai Geng, Yuanqing Zheng, Chris Xiaoxuan Lu\n\n完整摘要: In multi-robot collaboration, task handovers rely on downstream verifiers performing remote attestation, which inspects sensor telemetry to ensure a robot's physical behavior strictly matches its assigned task. But can this telemetry be trusted? We show that it often cannot. In this paper, we uncover a severe vulnerability in Robot Operating System (ROS) 2: by modifying a single environment variable, an adversary can execute a pre-built hook to covertly intercept and inject both telemetry and control signals before they are published. Consequently, adversaries can hijack a robot to perform dangerous tasks while spoofing downstream verifiers with synthesized fake telemetry. Worse still, by exploiting the widespread reliance on third-party Docker containers and auxiliary tools, attackers can distribute compromised packages embedded with these malicious hooks to launch such attacks easily. On a physical Franka Emika robotic arm running Secure ROS 2, our attack injects fabricated telemetry in real time with only around 3 ms of jitter, preserving temporal synchronization and hardware integrity while achieving an 87% success rate even against an AI-based detector. We have responsibly disclosed these findings to the ROS 2 development team. We prepared a demo video available at https://youtu.be/ExeiGqUrnhQ.",
   "source_type": "paper"
