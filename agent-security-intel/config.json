@@ -1,5 +1,6 @@
 {
   "report": {
+    "top_n": 10,
     "gh_min_score": 6,
     "top_papers": 16,
     "top_gh_new": 10,

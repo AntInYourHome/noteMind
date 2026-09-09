@@ -694,154 +694,53 @@ def build_report(items_by_key, statuses, state, today, top1=None, ranked=None, d
     L = []
     L.append("# AI Agent / AgentOS 安全 · 每日情报 №%s" % today)
     L.append("")
-    L.append("> 采集时间：%s（本地）｜数据源：%s" % (
-        datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "、".join(s["name"] for s in statuses)))
+    L.append("> 采集时间：%s（本地）｜数据源 %d 个（健康度见附录）" % (
+        datetime.now().strftime("%Y-%m-%d %H:%M"), len(statuses)))
+    L.append("")
+
+    # 今日要点：全部条目统一排序的 Top N 榜单（世界要抓关键信息）
+    board = (ranked or [])[:R.get("top_n", 10)]
+    if board:
+        L.append("## 🎯 今日要点（Top %d · 综合关键度排序）" % len(board))
+        L.append("")
+        L.append("> 排序 = 相关度（关键词加权）+ 跨层加成 + 顶会接收 🏆 加成 + 新信号优先；watchlist 日常星增动态不参选。第 1 名附深度分析。")
+        L.append("")
+        for i, it in enumerate(board, 1):
+            L.append(fmt_item(it, is_new(it), i))
+            L.append("")
+            if i == 1 and it is top1:
+                cross = "、".join(t for t in it.get("tags", []) if t != "综合") or "单层"
+                L.append("**入选理由**：相关度 %d ｜ 层级定位：%s" % (it.get("score", 0), cross))
+                L.append("")
+                L.append("<!-- top1-analysis: 分析师在此插入深度分析（是什么/技术机制/证据强度/四层定位/影响与对策） -->")
+                L.append("")
+        if len(board) > 1:
+            L.append("<!-- top-briefs: 对第 2-%d 名逐条插入一句话简评（为什么值得关注/与哪条同线），格式为 markdown 列表 -->" % len(board))
+            L.append("")
+
+    # 其余雷达：数字摘要（榜单之外的完整数据在 data/latest-items.json）
+    L.append("## 📊 其余雷达（数字摘要）")
     L.append("")
     ok_cnt = sum(1 for s in statuses if s["status"].startswith("OK"))
+    venue_show = venues[:CFG.get("venues", {}).get("top_show", 10)]
+    deep_show = deep[:R.get("top_deep", 12)]
+    deep_note = "P0/P1 每日，P2 每周一"
+    if deep_stats:
+        deep_note += "｜检查 %d/%d 仓，%d 仓增量" % (
+            deep_stats.get("checked", 0), deep_stats.get("planned", 0),
+            deep_stats.get("increments", 0))
     L.append("| 维度 | 今日条目 | 说明 |")
     L.append("|---|---|---|")
-    L.append("| 📄 论文雷达 | %d | arXiv 近 %d 天，按相关度排序（comment 含顶会接收标记 🏆） |" % (len(papers), CFG["arxiv"]["days"]))
-    venue_show = venues[:CFG.get("venues", {}).get("top_show", 10)]
+    L.append("| 📄 论文雷达 | %d | arXiv 近 %d 天（comment 含顶会接收标记 🏆） |" % (len(papers), CFG["arxiv"]["days"]))
     L.append("| 🏆 顶会雷达 | %d/%d | Big 4 接收列表增量（同行评审信号） |" % (len(venue_show), len(venues)))
-    L.append("| 🌱 GitHub 新星 | %d/%d | 近 14 天新建，优先展示安全相关 |" % (len(gh_new_show), len(gh_new)))
-    L.append("| 🔥 GitHub 活跃 | %d/%d | 近 7 天活跃，优先展示安全相关 |" % (len(gh_active_show), len(gh_active)))
+    L.append("| 🌱 GitHub 新星 | %d/%d | 近 14 天新建（安全相关优先） |" % (len(gh_new_show), len(gh_new)))
+    L.append("| 🔥 GitHub 活跃 | %d/%d | 近 7 天活跃 |" % (len(gh_active_show), len(gh_active)))
     L.append("| ⭐ Watchlist | %d/%d | 成熟项目星标/更新动态 |" % (len(gh_watch_ok), len(CFG["github"]["watchlist"])))
-    deep_show = deep[:R.get("top_deep", 12)]
-    deep_note = "经典项目增量精读：P0/P1 每日，P2 每周一"
-    if deep_stats:
-        deep_note += "｜本期检查 %d/%d 仓，%d 仓增量，%d 仓静默" % (
-            deep_stats.get("checked", 0), deep_stats.get("planned", 0),
-            deep_stats.get("increments", 0), deep_stats.get("checked", 0) - deep_stats.get("increments", 0))
     L.append("| 📖 经典精读 | %d/%d | %s |" % (len(deep_show), len(deep), deep_note))
     L.append("| 🛰️ 安全资讯 | %d/%d | RSS 相关度≥%d 条目 |" % (len(news_show), len(news), R["news_min_score"]))
     L.append("| ✅ 源健康度 | %d/%d | 正常采集的源数量 |" % (ok_cnt, len(statuses)))
     L.append("")
-
-    # TL;DR
-    L.append("## ⚡ 今日速览")
-    L.append("")
-    top_news = news_show[:3]
-    top_gh = [g for g in gh_new_show if g["stars"] >= 50][:3] or gh_new_show[:2]
-    top_paper = papers[:3]
-    for it in top_paper:
-        L.append("- 📄 **[%s](%s)**（%s，%s）" % (it["title"][:80], it["url"], it.get("date", ""), "/".join(it["tags"][:2])))
-    for it in top_gh:
-        L.append("- 🌱 **[%s](%s)** ⭐%s — %s" % (it["title"], it["url"], format(it["stars"], ","), it["desc"][:100]))
-    for it in top_news:
-        L.append("- 🛰️ **[%s](%s)**（%s）" % (it["title"][:90], it["url"], it["feed"]))
-    if not (top_paper or top_gh or top_news):
-        L.append("- 今日无高热度条目。")
-    L.append("")
-
-    # top1
-    if top1:
-        cross = "、".join(t for t in top1.get("tags", []) if t != "综合") or "单层"
-        L.append("## 🏆 每日 Top1（自动评选）")
-        L.append("")
-        L.append(fmt_item(top1, is_new(top1), 1))
-        L.append("")
-        L.append("**入选理由**：相关度 %d ｜ 层级定位：%s ｜ 评选规则 = 相关度 + 跨层加成 + 新信号优先（watchlist 日常动态不参选）。"
-                 % (top1.get("score", 0), cross))
-        L.append("")
-        L.append("<!-- top1-analysis: 分析师在此插入深度分析（是什么/技术机制/证据强度/四层定位/影响与对策） -->")
-        L.append("")
-
-        # Top2-4 次重要条目：供一句话简评
-        rest = (ranked or [])[1:4]
-        rest = [r for r in rest if r is not top1]
-        if rest:
-            L.append("## 🎯 次重要条目（Top2-%d，待简评）" % (len(rest) + 1))
-            L.append("")
-            for i, it in enumerate(rest, 2):
-                L.append(fmt_item(it, is_new(it), i))
-                L.append("")
-            L.append("<!-- top3-briefs: 分析师在此逐条插入一句话简评（为什么值得关注/与哪条同线） -->")
-            L.append("")
-
-    # papers
-    L.append("## 📄 论文雷达（arXiv · 相关度排序）")
-    L.append("")
-    for i, it in enumerate(papers[:R["top_papers"]], 1):
-        L.append(fmt_item(it, is_new(it), i))
-        L.append("")
-    if not papers:
-        L.append("- 无。")
-        L.append("")
-
-    # venues (Big 4 accepted papers)
-    L.append("## 🏆 顶会雷达（IEEE S&P / ACM CCS / USENIX Security / NDSS）")
-    L.append("")
-    L.append("> 双通道：官网接收列表增量监控（S&P/NDSS）+ arXiv comment 接收信号（四大全覆盖，见论文雷达 🏆 标记）。接收=同行评审通过，证据强度高于 arXiv v1。")
-    L.append("")
-    for i, it in enumerate(venue_show, 1):
-        L.append(fmt_item(it, is_new(it), i))
-        L.append("")
-    if not venue_show:
-        L.append("- 本期四大顶会接收列表无新增（列表每年集中公布数次，静默属常态）。")
-        L.append("")
-
-    # github new
-    L.append("## 🌱 GitHub 新星仓库（近 14 天创建 · 安全相关优先，按星数排序）")
-    L.append("")
-    for i, it in enumerate(gh_new_show, 1):
-        L.append(fmt_item(it, is_new(it), i))
-        L.append("")
-    if not gh_new_show:
-        L.append("- 无。")
-        L.append("")
-
-    # github active
-    L.append("## 🔥 GitHub 活跃热点（近 7 天活跃 · 安全相关优先）")
-    L.append("")
-    for i, it in enumerate(gh_active_show, 1):
-        L.append(fmt_item(it, is_new(it), i))
-        L.append("")
-    if not gh_active_show:
-        L.append("- 无。")
-        L.append("")
-
-    # watchlist
-    L.append("## ⭐ Watchlist 动态（成熟项目，按七日星增排序）")
-    L.append("")
-    for i, it in enumerate(gh_watch_ok[:R["top_gh_watch"]], 1):
-        L.append(fmt_item(it, is_new(it), i))
-        L.append("")
-
-    # deep read（经典项目精读：增量驱动，无动态自动静默）
-    L.append("## 📖 经典项目精读（增量驱动 · 无动态自动静默）")
-    L.append("")
-    L.append("> 精读清单按优先级分层：P0=硬件抓手核心（安全MCU/TEE/故障注入/具身执行），P1=Agent 安全经典与标准，P2=产业/学术信号（每周一）。")
-    L.append("")
-    for i, it in enumerate(deep_show, 1):
-        L.append(fmt_item(it, is_new(it), i))
-        L.append("")
-    if not deep_show:
-        L.append("- 本期精读清单无实质增量（静默即无新闻，符合经典项目常态）。")
-        L.append("")
-    if deep_stats:
-        L.append("*覆盖统计：检查 %d/%d 仓 · 增量 %d · 静默 %d%s。*" % (
-            deep_stats.get("checked", 0), deep_stats.get("planned", 0),
-            deep_stats.get("increments", 0),
-            deep_stats.get("checked", 0) - deep_stats.get("increments", 0),
-            " · 含 P2 周检" if deep_stats.get("p2_day") else ""))
-        L.append("")
-
-    # news
-    L.append("## 🛰️ 安全资讯（近 %d 天 · 相关度过滤）" % CFG["rss_days"])
-    L.append("")
-    for i, it in enumerate(news_show, 1):
-        L.append(fmt_item(it, is_new(it), i))
-        L.append("")
-    if not news_show:
-        L.append("- 本期无达到阈值条目。")
-        L.append("")
-
-    # conferences
-    L.append("## 🎪 会议 · 框架 · 产业动态（常设目录）")
-    L.append("")
-    for c in CFG["conferences"]:
-        L.append("- **[%s](%s)** — %s" % (c["name"], c["url"], c["note"]))
+    L.append("- 完整结构化数据见 `data/latest-items.json`（全部条目含 score/hits/tags 字段，可二次加工检索）。")
     L.append("")
 
     # trends
@@ -926,8 +825,10 @@ def apply_analysis(analysis_path, today):
         text = replace_placeholder(
             text, "<!-- top1-analysis:",
             "### 🔍 深度分析\n\n" + a["top1_analysis"].strip())
-    if a.get("top3_briefs"):
-        text = replace_placeholder(text, "<!-- top3-briefs:", a["top3_briefs"].strip())
+    top_briefs = a.get("top_briefs") or a.get("top3_briefs")
+    if top_briefs:
+        text = replace_placeholder(text, "<!-- top-briefs:", top_briefs.strip())
+        text = replace_placeholder(text, "<!-- top3-briefs:", top_briefs.strip())
     if a.get("editor_notes"):
         if ("**%s 点评：**" % today) in text:
             print("(skip: editor_notes 今日已填充)")
@@ -1020,11 +921,11 @@ def main():
     if top1:
         top1_payload = dict(top1)
         top1_payload["detail"] = fetch_detail(top1)
-    if ranked[1:4]:
+    if ranked[1:]:
         top1_payload = top1_payload or {}
         top1_payload["runner_ups"] = [
             {k: it.get(k) for k in ("kind", "title", "url", "date", "score", "tags", "desc")}
-            for it in ranked[1:4]]
+            for it in ranked[1:CFG["report"].get("top_n", 10)]]
 
     os.makedirs(os.path.join(ROOT, "data"), exist_ok=True)
     with open(ITEMS_PATH, "w", encoding="utf-8") as f:
