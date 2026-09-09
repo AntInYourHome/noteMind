@@ -13,25 +13,33 @@
 
 ```bash
 # 采集并生成今日报告（报告输出到 reports/intel-YYYY-MM-DD.md）
-/e/python/python.exe scripts/collect.py
+py scripts/collect.py
 
 # 只导出原始数据（data/latest-items.json），适合接 LLM 做二段分析
-/e/python/python.exe scripts/collect.py --json-only
+py scripts/collect.py --json-only
 
 # 跳过某些源（调试用）
-/e/python/python.exe scripts/collect.py --skip-gh --skip-arxiv
+py scripts/collect.py --skip-gh --skip-arxiv
+
+# 把 LLM 分析（data/analysis.json）填入今日报告（幂等，可重复调用）
+py scripts/collect.py --apply-analysis data/analysis.json
+
+# 仓库内一键同步（切 daily-intel 分支+采集 / 提交推送）
+bash scripts/sync_intel.sh collect
+bash scripts/sync_intel.sh publish
 ```
 
-> Windows 下必须使用 `/e/python/python.exe`（PATH 里的 `python` 是 Windows Store 存根）。
+> Windows 下使用 `py` 启动 Python（PATH 里的 `python` 是 Windows Store 存根）。
 > 建议设置 `GITHUB_TOKEN` 环境变量以解除 GitHub API 匿名限流（60 次/时）。
 
 ## 目录结构
 
 ```
 agent-security-intel/
-├── config.json              # 数据源、关键词权重、watchlist、分类规则（改这里即可扩展）
+├── config.json              # 数据源、关键词权重、watchlist、精读清单、分类规则（改这里即可扩展）
 ├── scripts/
-│   ├── collect.py           # 主采集器：GitHub + arXiv + RSS → 报告
+│   ├── collect.py           # 主采集器：GitHub + arXiv + RSS + 经典项目精读 → 报告
+│   ├── sync_intel.sh        # 仓库内同步：collect（切分支+采集）/ publish（提交+推送）
 │   ├── probe_gh.py          # 调试：GitHub 关键词搜索探针
 │   ├── probe_watchlist.py   # 调试：watchlist 批量核查（404/迁移检测）
 │   └── probe_feeds.py       # 调试：arXiv/RSS 连通性探针
@@ -53,10 +61,11 @@ agent-security-intel/
 3. **🌱 GitHub 新星** — 近 14 天新建仓库，安全相关优先
 4. **🔥 GitHub 活跃** — 近 7 天活跃存量项目
 5. **⭐ Watchlist 动态** — 23 个成熟项目（promptfoo/garak/PyRIT/SkillSpector/agent-scan…）星增排序
-6. **🛰️ 安全资讯** — 6 个 RSS 源 + Google News，相关度≥阈值
-7. **🎪 会议·框架·产业** — OWASP ASI Top 10、MITRE ATLAS、Black Hat、DEF CON AI Village
-8. **📈 趋势信号** — 热词频次 + 与上一期对比的升降
-9. **🧠 分析师点评** — 人工/LLM 撰写（写入 `data/editor-notes.md`）
+6. **📖 经典项目精读** — P0×5（安全MCU/TEE/故障注入/具身执行）+ P1×7（Agent 安全经典与标准）每日增量精读，P2×4 每周一；数据层走 GitHub Atom feed（无 API 配额），无动态自动静默
+7. **🛰️ 安全资讯** — 12 个 RSS 源 + Google News，相关度≥阈值
+8. **🎪 会议·框架·产业** — OWASP ASI Top 10、MITRE ATLAS、Black Hat、DEF CON AI Village
+9. **📈 趋势信号** — 热词频次 + 与上一期对比的升降
+10. **🧠 分析师点评** — 自动化流水线写入 `data/analysis.json` 后经 `--apply-analysis` 幂等填充
 
 ## 数据源机制（避坑说明）
 
