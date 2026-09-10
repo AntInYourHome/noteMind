@@ -80,7 +80,8 @@
       "AgentOps-AI/agentops",
       "ottosulin/awesome-ai-security",
       "huhusmang/Awesome-LLMs-for-Vulnerability-Detection",
-      "systempromptio/awesome-ai-agent-governance"
+      "systempromptio/awesome-ai-agent-governance",
+      "GauthamMK-0/Cudro"
     ],
     "emerging_searches": [
       { "label": "Agent 安全新星（近14天新建）", "q": "\"agent security\" OR \"prompt injection\" OR \"MCP security\" created:>{cutoff}" },
