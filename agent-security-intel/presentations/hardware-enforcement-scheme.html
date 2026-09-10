@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>安全硬件强制方案推导 — 内部技术评审</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   SIGNAL 设计系统 · 中文执行规范
+   navy/cream 双表面 · 唯一金色强调 · hairline 分区 · 80px 网格指纹
+   CJK：Noto Sans SC 全系统 / em=金色无斜体 / 字距 0 / 行高放宽
+   ============================================================ */
+:root {
+  --navy: #1C2644; --navy-alt: #232F55;
+  --cream: #F0ECE3; --cream-alt: #E6E0D4;
+  --text-warm: #E2DCD0; --muted-d: #8A96A8; --hint-d: #4E5A6E;
+  --ink: #1A2030; --muted-l: #5A6270; --hint-l: #9AA0AC;
+  --gold: #C8A870;
+  --border-d: #2E3D5C; --border-l: #CAC4B4;
+  --serif: 'Source Serif 4', 'Noto Sans SC', Georgia, serif;
+  --sans: 'DM Sans', 'Noto Sans SC', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', 'Noto Sans SC', monospace;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* === VIEWPORT BASE（固定 16:9 舞台，强制包含） === */
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #000; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+.deck-viewport { position: fixed; inset: 0; overflow: hidden; background: #000; }
+.deck-stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden; transform-origin: 0 0; }
+.slide { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: hidden; display: block; visibility: hidden; opacity: 0; pointer-events: none; }
+.slide.active, .slide.visible { visibility: visible; opacity: 1; pointer-events: auto; z-index: 1; }
+img, video, canvas, svg { max-width: 100%; max-height: 100%; }
+@media print {
+  html, body { width: 1920px; height: auto; overflow: visible; background: #fff; }
+  .deck-viewport { position: static; overflow: visible; }
+  .deck-stage { position: static; width: auto; height: auto; transform: none !important; }
+  .slide { position: relative; display: block !important; visibility: visible !important; opacity: 1 !important; width: 1920px; height: 1080px; break-after: page; page-break-after: always; }
+  .slide:last-child { break-after: auto; }
+  .deck-controls, .edit-toggle, .edit-hotzone { display: none !important; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.2s !important; } }
+
+/* === 表面 === */
+.slide.dark { background: var(--navy); color: var(--text-warm); font-family: var(--sans); }
+.slide.dark::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
+  background-size: 80px 80px; }
+.slide.light { background: var(--cream); color: var(--ink); font-family: var(--sans); }
+
+/* === 通用排版 === */
+h1, h2, h3 { font-family: var(--serif); letter-spacing: 0; }
+em { font-style: normal; color: var(--gold); }   /* CJK：金色无斜体 */
+.kicker { font-family: var(--mono); font-size: 19px; font-weight: 500; color: var(--gold);
+  letter-spacing: .22em; text-transform: uppercase; }
+.kicker .zh { letter-spacing: .1em; text-transform: none; }
+.rule-gold { width: 36px; height: 1px; background: var(--gold); }
+.bullet { display: flex; gap: 18px; align-items: baseline; }
+.bullet::before { content: "—"; font-family: var(--mono); color: var(--gold); font-weight: 500; flex: none; }
+
+/* === 页面 chrome（顶部章节条 + 底部落款条，hairline 包夹） === */
+.chrome { position: absolute; top: 40px; left: 96px; right: 96px; display: flex;
+  justify-content: space-between; align-items: baseline; padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-d); font-family: var(--mono); font-size: 18px;
+  color: var(--muted-d); letter-spacing: .18em; }
+.chrome b { color: var(--gold); font-weight: 500; }
+.light .chrome { border-color: var(--border-l); color: var(--muted-l); }
+.light .chrome b { color: var(--gold); }
+.foot { position: absolute; bottom: 40px; left: 96px; right: 96px; display: flex;
+  justify-content: space-between; padding-top: 14px; border-top: 1px solid var(--border-d);
+  font-family: var(--mono); font-size: 18px; color: var(--hint-d); letter-spacing: .12em; }
+.light .foot { border-color: var(--border-l); color: var(--hint-l); }
+
+/* === 动画 === */
+.reveal { opacity: 0; transform: translateY(26px); transition: opacity .65s var(--ease), transform .65s var(--ease); }
+.slide.visible .reveal { opacity: 1; transform: none; }
+.slide.visible .d1 { transition-delay: .08s; } .slide.visible .d2 { transition-delay: .18s; }
+.slide.visible .d3 { transition-delay: .28s; } .slide.visible .d4 { transition-delay: .38s; }
+.slide.visible .d5 { transition-delay: .48s; } .slide.visible .d6 { transition-delay: .58s; }
+
+/* ============ S1 封面（navy · 无 chrome） ============ */
+.cover { padding: 0; }
+.cover .kick-wrap { position: absolute; top: 96px; left: 96px; display: flex; align-items: center; gap: 20px; }
+.cover h1 { position: absolute; left: 96px; top: 216px; width: 1500px;
+  font-weight: 900; font-size: 98px; line-height: 1.22; color: var(--cream); }
+.cover h1 .sub-line { display: block; font-size: 66px; font-weight: 700; margin-top: 18px; color: var(--text-warm); }
+.cover .lede { position: absolute; left: 96px; top: 646px; width: 1050px;
+  font-size: 29px; line-height: 1.8; color: var(--muted-d); }
+.cover .lede b { color: var(--text-warm); font-weight: 500; }
+.cover .meta { position: absolute; left: 96px; bottom: 96px; display: flex; gap: 48px;
+  font-family: var(--mono); font-size: 19px; color: var(--hint-d); letter-spacing: .08em; }
+.cover .meta b { color: var(--gold); font-weight: 500; }
+.cover .numeral { position: absolute; right: 96px; top: 200px; font-family: var(--serif);
+  font-style: italic; font-weight: 400; font-size: 280px; line-height: 1; color: transparent;
+  -webkit-text-stroke: 1.5px var(--gold); text-align: right; }
+.cover .numeral small { display: block; -webkit-text-stroke: 0; font-family: var(--mono);
+  font-style: normal; font-size: 19px; color: var(--muted-d); letter-spacing: .3em; margin-top: 16px; }
+
+/* ============ S2 缺口对照（navy · 双栏） ============ */
+.headline { position: absolute; top: 108px; left: 96px; right: 96px; }
+.headline h2 { font-size: 60px; font-weight: 700; line-height: 1.25; color: var(--cream); margin-top: 16px; }
+.light .headline h2 { color: var(--ink); }
+.compare { position: absolute; top: 296px; left: 96px; right: 96px; display: grid;
+  grid-template-columns: 1fr 1fr; }
+.compare .panel { padding: 34px 44px 30px 0; border-right: 1px solid var(--border-d); }
+.compare .panel:last-child { border-right: 0; padding-left: 44px; padding-right: 0; }
+.compare .pname { font-family: var(--mono); font-size: 21px; color: var(--gold); letter-spacing: .16em; margin-bottom: 6px; }
+.compare .ptitle { font-family: var(--serif); font-size: 34px; font-weight: 600; color: var(--text-warm); margin-bottom: 22px; }
+.compare .grp { font-family: var(--mono); font-size: 18px; color: var(--hint-d); letter-spacing: .2em; margin: 18px 0 10px; }
+.compare li { list-style: none; font-size: 24px; line-height: 1.72; color: var(--muted-d);
+  display: flex; gap: 14px; }
+.compare li::before { content: "—"; color: var(--gold); font-family: var(--mono); flex: none; }
+.compare li b { color: var(--text-warm); font-weight: 500; }
+.compare li.gap b { color: var(--gold); }
+.verdict { position: absolute; bottom: 128px; left: 96px; right: 96px; padding-top: 26px;
+  border-top: 1px solid var(--border-d); font-family: var(--serif); font-size: 31px;
+  line-height: 1.65; color: var(--text-warm); }
+.verdict em { font-weight: 600; }
+
+/* ============ S3 三域模型（cream · 图 + 三件套） ============ */
+.domains { position: absolute; top: 300px; left: 96px; width: 900px; }
+.domains .box { border: 1px solid var(--border-l); padding: 26px 30px; background: var(--cream); }
+.domains .box + .arrow { display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 30px; font-family: var(--mono); font-size: 18px; color: var(--muted-l); }
+.domains .box .bt { font-family: var(--mono); font-size: 18px; letter-spacing: .2em; color: var(--muted-l); margin-bottom: 8px; }
+.domains .box .bn { font-family: var(--serif); font-size: 33px; font-weight: 600; color: var(--ink); }
+.domains .box .bd { font-size: 21px; line-height: 1.65; color: var(--muted-l); margin-top: 8px; }
+.domains .box.secure { border-left: 3px solid var(--gold); }
+.domains .box.gate { border-top: 2px solid var(--gold); }
+.trio { position: absolute; top: 300px; right: 96px; width: 640px; }
+.trio .item { border-top: 1px solid var(--border-l); padding: 26px 0 24px; }
+.trio .item:first-child { border-top: 2px solid var(--gold); }
+.trio .tt { display: flex; align-items: baseline; gap: 16px; margin-bottom: 10px; }
+.trio .tt .no { font-family: var(--serif); font-style: italic; font-size: 30px; color: var(--gold); }
+.trio .tt .tn { font-family: var(--serif); font-size: 32px; font-weight: 600; color: var(--ink); }
+.trio .td { font-size: 23px; line-height: 1.72; color: var(--muted-l); }
+.trio .td b { color: var(--ink); font-weight: 500; }
+
+/* ============ S4 L2 下沉对照表（cream · 表格） ============ */
+.tbl { position: absolute; top: 292px; left: 96px; right: 96px; }
+.tbl table { width: 100%; border-collapse: collapse; }
+.tbl th { font-family: var(--mono); font-size: 18px; font-weight: 500; letter-spacing: .18em;
+  color: var(--muted-l); text-align: left; padding: 0 18px 12px 0; border-bottom: 2px solid var(--gold); }
+.tbl td { font-size: 22px; line-height: 1.55; color: var(--muted-l); vertical-align: top;
+  padding: 17px 18px 17px 0; border-bottom: 1px solid var(--border-l); }
+.tbl td.first { color: var(--ink); font-weight: 500; }
+.tbl td.last { color: var(--ink); }
+.tbl .arrow-cell { font-family: var(--mono); color: var(--gold); font-size: 20px; }
+.passoff { position: absolute; bottom: 128px; left: 96px; right: 96px; padding-top: 22px;
+  border-top: 1px solid var(--border-l); display: flex; gap: 40px; align-items: baseline;
+  font-size: 24px; color: var(--ink); }
+.passoff .lbl { font-family: var(--mono); font-size: 18px; letter-spacing: .18em; color: var(--muted-l); }
+.passoff b { color: var(--gold); font-family: var(--mono); font-weight: 500; margin-right: 26px; }
+
+/* ============ S5 L4 流程 + stat（navy · cycle-step） ============ */
+.steps { position: absolute; top: 300px; left: 96px; right: 96px; display: grid;
+  grid-template-columns: 1fr 44px 1fr 44px 1fr; align-items: stretch; }
+.step { border-top: 2px solid var(--gold); padding: 24px 26px 20px 0; }
+.step .sn { font-family: var(--serif); font-style: italic; font-size: 28px; color: var(--gold); margin-bottom: 8px; }
+.step .st { font-family: var(--serif); font-size: 30px; font-weight: 600; color: var(--text-warm); margin-bottom: 12px; }
+.step .sd { font-size: 22px; line-height: 1.7; color: var(--muted-d); }
+.step .sd b { color: var(--text-warm); font-weight: 500; }
+.steps .conn { display: flex; align-items: center; justify-content: center; color: var(--border-d); font-size: 26px; }
+.stats { position: absolute; top: 700px; left: 96px; right: 96px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 44px; }
+.stat { border-top: 1px solid var(--border-d); padding-top: 20px; }
+.stat .v { font-family: var(--serif); font-size: 74px; font-weight: 600; color: var(--gold);
+  letter-spacing: -0.02em; line-height: 1; }
+.stat .v small { font-size: 40px; }
+.stat .l { font-size: 23px; color: var(--text-warm); margin-top: 12px; font-weight: 500; }
+.stat .n { font-family: var(--mono); font-size: 18px; color: var(--hint-d); margin-top: 6px; letter-spacing: .08em; }
+
+/* ============ S6 合流点（navy · statement 无 chrome） ============ */
+.statement { padding: 0; }
+.statement .kick-wrap { position: absolute; top: 132px; left: 96px; display: flex; align-items: center; gap: 20px; }
+.statement h2 { position: absolute; left: 96px; top: 240px; width: 1420px;
+  font-size: 76px; font-weight: 700; line-height: 1.32; color: var(--cream); }
+.formula { position: absolute; left: 96px; top: 560px; font-family: var(--mono);
+  font-size: 46px; color: var(--gold); letter-spacing: .02em; }
+.statement .expl { position: absolute; left: 96px; top: 682px; width: 1180px;
+  font-size: 27px; line-height: 1.85; color: var(--muted-d); }
+.statement .expl b { color: var(--text-warm); font-weight: 500; }
+.statement .foot-s { position: absolute; bottom: 96px; left: 96px; right: 96px;
+  padding-top: 20px; border-top: 1px solid var(--border-d);
+  font-family: var(--mono); font-size: 19px; color: var(--hint-d); letter-spacing: .14em; }
+
+/* ============ S7 选型矩阵（cream · 三列表） ============ */
+.matrix { position: absolute; top: 292px; left: 96px; right: 96px; }
+.matrix table { width: 100%; border-collapse: collapse; }
+.matrix th { font-family: var(--serif); font-size: 30px; font-weight: 600; color: var(--ink);
+  padding: 0 20px 14px 0; border-bottom: 2px solid var(--gold); text-align: left; }
+.matrix th small { display: block; font-family: var(--mono); font-size: 17px; font-weight: 400;
+  color: var(--muted-l); letter-spacing: .16em; margin-top: 6px; }
+.matrix td { font-size: 22px; line-height: 1.55; color: var(--muted-l); vertical-align: top;
+  padding: 15px 20px 15px 0; border-bottom: 1px solid var(--border-l); }
+.matrix td.rowhead { font-family: var(--mono); font-size: 17px; letter-spacing: .14em; color: var(--muted-l); padding-top: 19px; width: 190px; }
+.matrix td b { color: var(--ink); font-weight: 500; }
+.matrix td.win { color: var(--ink); }
+.matrix td.win b { color: var(--gold); font-weight: 500; }
+.principle { position: absolute; bottom: 128px; left: 96px; right: 96px; padding-top: 22px;
+  border-top: 1px solid var(--border-l); font-family: var(--serif); font-size: 30px;
+  line-height: 1.6; color: var(--ink); }
+
+/* ============ S8 路线图（navy · 竖时间线） ============ */
+.phases { position: absolute; top: 292px; left: 96px; right: 96px; }
+.phase { display: grid; grid-template-columns: 150px 1fr 560px; gap: 0 34px; align-items: start;
+  padding: 22px 0; border-bottom: 1px solid var(--border-d); }
+.phase:last-child { border-bottom: 0; }
+.phase .pno { font-family: var(--serif); font-style: italic; font-size: 40px; color: var(--gold); line-height: 1; }
+.phase .pno small { display: block; font-family: var(--mono); font-style: normal; font-size: 16px;
+  color: var(--hint-d); letter-spacing: .16em; margin-top: 8px; }
+.phase .pt { font-family: var(--serif); font-size: 29px; font-weight: 600; color: var(--text-warm); }
+.phase .pd { font-size: 21px; line-height: 1.66; color: var(--muted-d); margin-top: 6px; }
+.phase .pd b { color: var(--text-warm); font-weight: 500; }
+.phase .pv { border-left: 3px solid var(--gold); padding: 4px 0 4px 20px; }
+.phase .pv .vt { font-family: var(--mono); font-size: 16px; color: var(--gold); letter-spacing: .2em; margin-bottom: 8px; }
+.phase .pv .vd { font-size: 21px; line-height: 1.6; color: var(--muted-d); }
+.phase .pv .vd b { color: var(--text-warm); font-weight: 500; }
+
+/* ============ S9 结论（navy · 无 chrome） ============ */
+.concl { padding: 0; }
+.concl .kick-wrap { position: absolute; top: 120px; left: 96px; display: flex; align-items: center; gap: 20px; }
+.concl h2 { position: absolute; left: 96px; top: 218px; width: 1560px; font-size: 66px;
+  font-weight: 700; line-height: 1.34; color: var(--cream); }
+.concl .three { position: absolute; left: 96px; top: 468px; right: 96px; display: grid;
+  grid-template-columns: repeat(3, 1fr); gap: 44px; }
+.concl .t { border-top: 1px solid var(--border-d); padding-top: 20px; }
+.concl .t .v { font-family: var(--serif); font-size: 34px; font-weight: 600; color: var(--text-warm); }
+.concl .t .v em { font-size: 26px; }
+.concl .t .n { font-family: var(--mono); font-size: 18px; color: var(--hint-d); margin-top: 8px; letter-spacing: .1em; }
+.openq { position: absolute; left: 96px; bottom: 150px; width: 1728px; padding-top: 24px;
+  border-top: 1px solid var(--border-d); display: flex; gap: 30px; align-items: baseline; }
+.openq .lbl { font-family: var(--mono); font-size: 18px; color: var(--gold); letter-spacing: .18em; flex: none; }
+.openq ol { display: flex; flex-wrap: wrap; gap: 10px 34px; list-style: none; }
+.openq li { font-size: 21px; color: var(--muted-d); line-height: 1.6; }
+.openq li::before { content: "— "; font-family: var(--mono); color: var(--gold); }
+.concl .foot-s { position: absolute; bottom: 62px; left: 96px; right: 96px;
+  font-family: var(--mono); font-size: 18px; color: var(--hint-d); letter-spacing: .12em; }
+
+/* === 播放器控制（舞台外） === */
+.deck-controls { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  z-index: 1000; display: flex; gap: 10px; align-items: center;
+  font-family: var(--mono); font-size: 14px; color: #666; }
+.deck-controls button { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14);
+  color: #ddd; font-family: var(--mono); font-size: 15px; padding: 7px 16px; cursor: pointer; }
+.deck-controls button:hover { border-color: var(--gold); color: var(--gold); }
+.deck-controls .cnt { padding: 0 10px; letter-spacing: .1em; }
+
+/* === 行内编辑 === */
+.edit-hotzone { position: fixed; top: 0; left: 0; width: 80px; height: 80px; z-index: 10000; cursor: pointer; }
+.edit-toggle { position: fixed; top: 16px; left: 16px; z-index: 10001; opacity: 0; pointer-events: none;
+  transition: opacity .3s ease; background: rgba(28,38,68,.9); border: 1px solid var(--gold);
+  color: var(--gold); font-family: var(--mono); font-size: 14px; padding: 8px 14px; cursor: pointer; }
+.edit-toggle.show, .edit-toggle.active { opacity: 1; pointer-events: auto; }
+.slide [contenteditable="true"] { outline: 1px dashed var(--gold); outline-offset: 6px; }
+</style>
+</head>
+<body>
+<div class="deck-viewport">
+<main class="deck-stage" id="deckStage">
+
+<!-- ============ S1 · 封面（无 chrome） ============ -->
+<section class="slide dark cover active">
+  <div class="kick-wrap reveal d1"><span class="rule-gold"></span><span class="kicker">AGENT-SECURITY-INTEL <span class="zh">· 内部技术评审</span></span></div>
+  <h1 class="reveal d2">安全硬件强制方案推导<br><span class="sub-line">——把裁决放进<em>不可绕过</em>的域</span></h1>
+  <div class="lede reveal d3">
+    两个开源样本已经把<b>决策逻辑</b>做到可验证：Prismor 的策略引擎与证据链、
+    Cudro 的确定性投影核。但两者的执行环境仍是<b>软件互锁</b>——
+    本方案推导最后一步：裁决、度量与证据如何落进安全岛 / TEE / 安全 MCU。
+  </div>
+  <div class="meta reveal d4">
+    <span><b>DOC</b> hardware-enforcement-scheme.md</span>
+    <span><b>CASES</b> Prismor × Cudro</span>
+    <span><b>DATE</b> 2026.09.10</span>
+  </div>
+  <div class="numeral reveal d5">03<small>THREE-DOMAIN MODEL</small></div>
+</section>
+
+<!-- ============ S2 · 两个样本的缺口（navy） ============ -->
+<section class="slide dark">
+  <div class="chrome"><span><b>SECTION 01</b> · THE GAP</span><span>02 / 09</span></div>
+  <div class="headline"><div class="kick-wrap reveal d1" style="display:flex;align-items:center;gap:16px"><span class="rule-gold"></span><span class="kicker">起点 · 半成品答案</span></div>
+    <h2 class="reveal d2">两个样本，同一类缺口：<em>同权限域</em></h2></div>
+  <div class="compare reveal d3">
+    <div class="panel">
+      <div class="pname">PRISMORSEC / PRISMOR</div>
+      <div class="ptitle">L2 · Agent 运行时裁决</div>
+      <div class="grp">已收敛</div>
+      <li><b>canonical event</b> 统一事件模型，六表面同一裁决</li>
+      <li>策略引擎 <b>16 类</b>阻断规则，逐条 observe/enforce</li>
+      <li>hash chain + <b>Ed25519</b> 证据链，签名远程策略</li>
+      <div class="grp">缺口</div>
+      <li class="gap">裁决器与被裁决对象<b>同 OS、同权限域</b></li>
+      <li class="gap"><b>pkill</b> 拆闸 · 改策略文件 · 解析走私 · TOCTOU 全部可行</li>
+    </div>
+    <div class="panel">
+      <div class="pname">GAUTHAMMK-0 / CUDRO</div>
+      <div class="ptitle">L4 · VLA 流形投影过滤器</div>
+      <div class="grp">已收敛</div>
+      <li><b>11.6 µs</b> 确定性投影核，无堆分配，WCET 可分析</li>
+      <li>声明式约束，Eigen 参考实现<b>差分验证</b> &lt;1e-4</li>
+      <li><b>AOT / JIT 双后端</b>：开发期迭代，部署期固化</li>
+      <div class="grp">缺口</div>
+      <li class="gap">投影核跑在<b>应用处理器</b>，与 VLA 共享 OS</li>
+      <li class="gap">绕开它不需要攻破它——<b>没有硬件闸门</b></li>
+    </div>
+  </div>
+  <div class="verdict reveal d4">
+    决策逻辑已经<em>可验证</em>，执行环境的"不可绕过"仍只是软件互锁——
+    逻辑层收敛到的位置，恰好是硬件能接手的位置。
+  </div>
+  <div class="foot"><span>安全硬件强制方案推导</span><span>docs/prismor-runtime-enforcement.md · docs/cudro-vla-safety-filter.md</span></div>
+</section>
+
+<!-- ============ S3 · 三域模型（cream） ============ -->
+<section class="slide light">
+  <div class="chrome"><span><b>SECTION 02</b> · REFERENCE MODEL</span><span>03 / 09</span></div>
+  <div class="headline"><div class="kick-wrap reveal d1" style="display:flex;align-items:center;gap:16px"><span class="rule-gold"></span><span class="kicker">统一抽象 · 三域模型</span></div>
+    <h2 class="reveal d2">硬件方案 = 三个域 + <em>三件套</em>机制</h2></div>
+  <div class="domains reveal d3">
+    <div class="box">
+      <div class="bt">NS · NORMAL SPHERE（开放域 · 不可信）</div>
+      <div class="bn">Agent / VLA / 工具</div>
+      <div class="bd">黑盒意图生成——注入、后门、幻觉是常态而非例外</div>
+    </div>
+    <div class="arrow"><span>意图：tool call / q* ▼</span><span>▲ 令牌 / q_safe</span></div>
+    <div class="box secure">
+      <div class="bt">SS · SECURE SPHERE（安全域 · 最小 TCB）</div>
+      <div class="bn">裁决器 + 策略 + 证据链</div>
+      <div class="bd">NS 杀不掉、写不进、伪造不了其输出</div>
+    </div>
+    <div class="arrow"><span>带签名 / MAC 的命令 ▼</span><span></span></div>
+    <div class="box gate">
+      <div class="bt">GATE · 执行边界</div>
+      <div class="bn">工具执行器 / 电机驱动 / 敏感外设</div>
+      <div class="bd">只接受 SS 域签名的令牌——强制互连</div>
+    </div>
+  </div>
+  <div class="trio">
+    <div class="item reveal d4">
+      <div class="tt"><span class="no">i.</span><span class="tn">强制互连</span></div>
+      <div class="td">执行通路在<b>芯片层</b>（TZPC / 外设防火墙）只对 SS 开放——NS 提权再高也<b>物理上</b>够不到执行边界，这是与 OS 权限的本质区别。</div>
+    </div>
+    <div class="item reveal d5">
+      <div class="tt"><span class="no">ii.</span><span class="tn">度量锚定</span></div>
+      <div class="td">裁决代码经 <b>secure boot 度量链</b>验证后才运行；策略更新走签名 + 版本化，验证密钥从文件系统移到<b>信任根</b>。</div>
+    </div>
+    <div class="item reveal d6">
+      <div class="tt"><span class="no">iii.</span><span class="tn">证据外送</span></div>
+      <div class="td">hash chain 的<b>链头签名密钥锚在硬件</b>，外送通道独立于 NS——NS 全域沦陷时，"发生过什么"仍然可审计。</div>
+    </div>
+  </div>
+  <div class="foot"><span>安全硬件强制方案推导</span><span>硬件方案不是替换这条链，而是给裁决与证据两个环节物理地位</span></div>
+</section>
+
+<!-- ============ S4 · L2 下沉（cream · 改造对照表） ============ -->
+<section class="slide light">
+  <div class="chrome"><span><b>SECTION 03</b> · L2 PATH</span><span>04 / 09</span></div>
+  <div class="headline"><div class="kick-wrap reveal d1" style="display:flex;align-items:center;gap:16px"><span class="rule-gold"></span><span class="kicker">下沉路径 一 · L2</span></div>
+    <h2 class="reveal d2">Prismor 裁决平面的 <em>TEE 化</em>（改造面小）</h2></div>
+  <div class="tbl reveal d3">
+    <table>
+      <tr><th style="width:31%">现状</th><th style="width:8%"></th><th style="width:33%">下沉后</th><th>增量价值</th></tr>
+      <tr><td class="first">eval-server 进程间评估通道</td><td class="arrow-cell">→</td><td>评估服务整体进 CVM / TEE</td><td class="last">裁决器脱离 NS 权限域</td></tr>
+      <tr><td class="first">签名远程策略（密钥在文件系统）</td><td class="arrow-cell">→</td><td>签名验证密钥进 TPM / DICE</td><td class="last">策略不可被 NS 篡改</td></tr>
+      <tr><td class="first">hash chain 自签证据链</td><td class="arrow-cell">→</td><td>链头密钥锚定硬件信任根</td><td class="last">日志不可删改</td></tr>
+      <tr><td class="first">裁决结果 = 返回值</td><td class="arrow-cell">→</td><td>短时效能力令牌（nonce + 过期）</td><td class="last">裁决执行原子绑定，杀 TOCTOU</td></tr>
+      <tr><td class="first">LLM judge 终裁</td><td class="arrow-cell">→</td><td>judge 降级为建议，SS 只复核结构化事实</td><td class="last">judge 被注入不再致命</td></tr>
+    </table>
+  </div>
+  <div class="passoff reveal d4">
+    <span class="lbl">绕过失效检验</span>
+    <span><b>拆闸 ✓</b>（NS 碰不到 CVM 内进程）</span>
+    <span><b>解析走私 ✓</b>（规范化代码被度量，解析器与工具同源）</span>
+    <span><b>TOCTOU ✓</b>（令牌一次性 + nonce）</span>
+  </div>
+  <div class="foot"><span>安全硬件强制方案推导</span><span>计算可行性：策略评估 µs–ms 级，CVM 可承担；语义评估留 NS 异步</span></div>
+</section>
+
+<!-- ============ S5 · L4 下沉（navy · 流程 + stat） ============ -->
+<section class="slide dark">
+  <div class="chrome"><span><b>SECTION 04</b> · L4 PATH</span><span>05 / 09</span></div>
+  <div class="headline"><div class="kick-wrap reveal d1" style="display:flex;align-items:center;gap:16px"><span class="rule-gold"></span><span class="kicker">下沉路径 二 · L4</span></div>
+    <h2 class="reveal d2">Cudro 投影核进<em>安全岛</em>：两段式</h2></div>
+  <div class="steps reveal d3">
+    <div class="step">
+      <div class="sn">i. 开发期</div>
+      <div class="st">NS 域 · JIT 迭代</div>
+      <div class="sd">.cudro 约束快速迭代，TCC <b>5–9.5 ms</b> 重出专用核——动态场景：桌子高度、工具长度、禁入区变化。</div>
+    </div>
+    <div class="conn">→</div>
+    <div class="step">
+      <div class="sn">ii. 部署期</div>
+      <div class="st">AOT 固化 + 认证</div>
+      <div class="sd">codegen_llvm 生成独立核 → <b>签名 → 度量</b> → 装入安全岛（lockstep 核）。认证对象可枚举。</div>
+    </div>
+    <div class="conn">→</div>
+    <div class="step">
+      <div class="sn">iii. 运行期</div>
+      <div class="st">双域协作</div>
+      <div class="sd">VLA（NS）产出 q* → 岛内 project(q*) → <b>q_safe + MAC 命令帧</b> → 电机驱动只认带 MAC 的帧。</div>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat reveal d4">
+      <div class="v">11.6<small>µs</small></div>
+      <div class="l">Panda 7-DOF 单次投影</div>
+      <div class="n">WCET 可分析 · 无堆分配 · 单遍求值</div>
+    </div>
+    <div class="stat reveal d5">
+      <div class="v">~3<small>K LOC</small></div>
+      <div class="l">岛内 TCB</div>
+      <div class="n">投影核 + 调度 + 通信栈 · 可形式化验证的量级</div>
+    </div>
+    <div class="stat reveal d6">
+      <div class="v">fail<small>-safe</small></div>
+      <div class="l">lockstep + 看门狗补齐</div>
+      <div class="n">投影不收敛 → 预定义安全态（保持 / 缓停）</div>
+    </div>
+  </div>
+  <div class="foot"><span>安全硬件强制方案推导</span><span>JIT 与 ISO 26262 认证的矛盾在两段式上自然消解——算法缺的板恰是平台的强项</span></div>
+</section>
+
+<!-- ============ S6 · 合流点（navy · statement 无 chrome） ============ -->
+<section class="slide dark statement">
+  <div class="kick-wrap reveal d1"><span class="rule-gold"></span><span class="kicker">THE CONVERGENCE INTERFACE <span class="zh">· 合流点</span></span></div>
+  <h2 class="reveal d2">L2 的裁决输出，<em>参数化</em> L4 的安全集合</h2>
+  <div class="formula reveal d3">g(q) = g_base(q) ∧ contract(q)</div>
+  <div class="expl reveal d4">
+    TEE 裁决产出的<b>任务契约</b>（允许动作集合 / 参数边界）经签名下发到安全岛，
+    作为投影流形的参数——数字侧判定"这个任务允许碰什么、多大幅度"，
+    物理侧的安全集合随之收紧。<b>两个项目各自指到了这个接口，中间的通道不存在</b>——
+    这是本方案最有原创价值的一格，也是最值得下注的空窗。
+  </div>
+  <div class="foot-s reveal d5">PRISMOR · CONTRACT.PY&nbsp;&nbsp;×&nbsp;&nbsp;CUDRO · TASK DECLARATION —— 签名下发通道 = 待建</div>
+</section>
+
+<!-- ============ S7 · 选型矩阵（cream） ============ -->
+<section class="slide light">
+  <div class="chrome"><span><b>SECTION 05</b> · PLATFORM MATRIX</span><span>07 / 09</span></div>
+  <div class="headline"><div class="kick-wrap reveal d1" style="display:flex;align-items:center;gap:16px"><span class="rule-gold"></span><span class="kicker">选型 · 各安其位</span></div>
+    <h2 class="reveal d2">CVM / 安全岛 / 安全MCU——<em>三个家</em></h2></div>
+  <div class="matrix reveal d3">
+    <table>
+      <tr><th style="width:190px"></th>
+        <th>CVM<small>TDX / SEV-SNP / CCA</small></th>
+        <th>安全岛<small>AURIX / RH850 / S32K + HSM</small></th>
+        <th>安全 MCU<small>TrustZone-M · PSA / SESIP</small></th></tr>
+      <tr><td class="rowhead">适配场景</td><td>云 / 工作站 agent（L2 为主）</td><td class="win"><b>车载 / 机器人边缘（L4 实时）</b></td><td>端侧轻量 agent、传感节点</td></tr>
+      <tr><td class="rowhead">实时性</td><td>ms 级（VM 切换开销）</td><td class="win"><b>µs 级 · lockstep · WCET 可认证</b></td><td>µs–ms 级</td></tr>
+      <tr><td class="rowhead">TCB 容量</td><td class="win"><b>大——完整策略引擎 + 审计</b></td><td>小——数千行可形式化</td><td>极小</td></tr>
+      <tr><td class="rowhead">外设强制力</td><td>弱（域边界在内存）</td><td class="win"><b>强——外设防火墙直达执行器</b></td><td>中（TZ-M 分区）</td></tr>
+      <tr><td class="rowhead">认证路径</td><td>CC EAL / 机密计算联盟</td><td class="win"><b>ISO 26262 ASIL-D / IEC 61508</b></td><td>PSA Certified / SESIP</td></tr>
+      <tr><td class="rowhead">典型角色</td><td>策略与证据的家</td><td class="win"><b>最后的闸门</b></td><td>传感器第一跳 / 最小强制点</td></tr>
+    </table>
+  </div>
+  <div class="principle reveal d4">
+    选型原则一句话：<em>证据与策略住 CVM，最后的闸门住安全岛，传感器第一跳住安全 MCU</em>——混合部署是车载与具身的标准形态。
+  </div>
+  <div class="foot"><span>安全硬件强制方案推导</span><span>SoC 内 TEE 做重计算 + 安全岛做实时终裁</span></div>
+</section>
+
+<!-- ============ S8 · 路线图（navy · 四阶段） ============ -->
+<section class="slide dark">
+  <div class="chrome"><span><b>SECTION 06</b> · ROADMAP</span><span>08 / 09</span></div>
+  <div class="headline"><div class="kick-wrap reveal d1" style="display:flex;align-items:center;gap:16px"><span class="rule-gold"></span><span class="kicker">分阶段落地 · 攻击验证增量</span></div>
+    <h2 class="reveal d2">每一步都有一次<em>拔闸测试</em></h2></div>
+  <div class="phases reveal d3">
+    <div class="phase">
+      <div class="pno">0<small>PHASE · 纯软件</small></div>
+      <div><div class="pt">现状部署 + 证据锚点</div>
+        <div class="pd">Prismor + Cudro 原样部署；把 hash chain 链头锚到本机 <b>TPM</b>（改动小）。</div></div>
+      <div class="pv"><div class="vt">验证物</div><div class="vd">日志链可在 NS 域之外<b>独立校验</b>。</div></div>
+    </div>
+    <div class="phase">
+      <div class="pno">1<small>PHASE · 信任根下沉</small></div>
+      <div><div class="pt">密钥与核的锚定</div>
+        <div class="pd">策略签名密钥进 TPM / DICE；投影核切 <b>AOT + 签名</b>，脱离 JIT。</div></div>
+      <div class="pv"><div class="vt">验证物</div><div class="vd">NS 域 <b>root 权限</b>下也无法伪造策略 / 替换核。</div></div>
+    </div>
+    <div class="phase">
+      <div class="pno">2<small>PHASE · 裁决下沉</small></div>
+      <div><div class="pt">裁决器进隔离域</div>
+        <div class="pd">eval-server 进 <b>CVM</b>（L2）；投影核上 <b>AURIX / S32K EVK</b> 的 lockstep 核（L4）。</div></div>
+      <div class="pv"><div class="vt">拔闸测试</div><div class="vd">杀掉 NS 全部进程，<b>物理动作仍在安全流形内</b>——硬件增量价值的直接判据。</div></div>
+    </div>
+    <div class="phase">
+      <div class="pno">3<small>PHASE · 强制互连</small></div>
+      <div><div class="pt">完整链闭环</div>
+        <div class="pd">执行器命令 <b>MAC 鉴权</b>（CAN-FD / ETHERCAT safety），传感器源头认证，TEE→安全岛<b>契约下发通道</b>落地。</div></div>
+      <div class="pv"><div class="vt">验证物</div><div class="vd">从注入到物理伤害的<b>每条路</b>都要过一道硬件闸。</div></div>
+    </div>
+  </div>
+  <div class="foot"><span>安全硬件强制方案推导</span><span>每阶段用「拔掉硬件闸门后攻击是否仍被拦」验证增量</span></div>
+</section>
+
+<!-- ============ S9 · 结论（navy · 无 chrome） ============ -->
+<section class="slide dark concl">
+  <div class="kick-wrap reveal d1"><span class="rule-gold"></span><span class="kicker">CONCLUSION <span class="zh">· 结论与开放问题</span></span></div>
+  <h2 class="reveal d2">不是发明新机制，而是给已收敛的逻辑<br>三个<em>物理属性</em></h2>
+  <div class="three">
+    <div class="t reveal d3">
+      <div class="v">裁决<em>不可绕过</em></div>
+      <div class="n">强制互连 · ENFORCED INTERCONNECT</div>
+    </div>
+    <div class="t reveal d4">
+      <div class="v">身份<em>不可伪造</em></div>
+      <div class="n">度量锚定 · MEASURED ANCHORING</div>
+    </div>
+    <div class="t reveal d5">
+      <div class="v">历史<em>不可篡改</em></div>
+      <div class="n">证据外送 · TAMPER-EVIDENT EXFIL</div>
+    </div>
+  </div>
+  <div class="openq reveal d6">
+    <span class="lbl">开放问题</span>
+    <ol>
+      <li>HITL 的可信路径（审批 UI 自身可被注入）</li>
+      <li>judge 位置悖论（NS 可被骗 / SS 则 TCB 膨胀）</li>
+      <li>跨域性能 vs 100–1000 Hz 控制环</li>
+      <li>约束语言表达力（无时间维 / 动态障碍）</li>
+      <li>认证闸门而非策略内容——否则每次改提示词都要重认证</li>
+    </ol>
+  </div>
+  <div class="foot-s reveal d6">AGENT-SECURITY-INTEL · 2026.09.10 · 推导基线：PRISMOR / CUDRO HEAD@2026-09-10 —— 设计推导，非已实现系统描述</div>
+</section>
+
+</main>
+</div>
+
+<!-- 播放控制（舞台外 chrome） -->
+<div class="deck-controls">
+  <button id="navPrev" title="上一页 (←)">←</button>
+  <span class="cnt" id="navCnt">1 / 9</span>
+  <button id="navNext" title="下一页 (→)">→</button>
+</div>
+<div class="edit-hotzone" id="editHotzone" title="编辑模式 (E)"></div>
+<button class="edit-toggle" id="editToggle" title="编辑模式 (E)">✏ 编辑</button>
+
+<script>
+/* ===========================================
+   播放器：舞台缩放 + 键盘/触摸/滚轮导航 + 行内编辑
+   =========================================== */
+class SlidePresentation {
+  constructor() {
+    this.slides = document.querySelectorAll('.slide');
+    this.current = 0;
+    this.stage = document.getElementById('deckStage');
+    this.fit(); addEventListener('resize', () => this.fit());
+    this.bindKeys(); this.bindTouch(); this.bindWheel();
+    this.show(0);
+  }
+  fit() {
+    const k = Math.min(innerWidth / 1920, innerHeight / 1080);
+    this.stage.style.transform = `translate(${(innerWidth - 1920 * k) / 2}px,${(innerHeight - 1080 * k) / 2}px) scale(${k})`;
+  }
+  bindKeys() {
+    addEventListener('keydown', e => {
+      if (e.target.getAttribute('contenteditable')) return;
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); this.show(this.current + 1); }
+      if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); this.show(this.current - 1); }
+      if (e.key === 'Home') this.show(0);
+      if (e.key === 'End') this.show(this.slides.length - 1);
+    });
+  }
+  bindTouch() {
+    let x0 = null;
+    addEventListener('touchstart', e => x0 = e.touches[0].clientX, { passive: true });
+    addEventListener('touchend', e => {
+      if (x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0;
+      if (Math.abs(dx) > 60) this.show(this.current + (dx < 0 ? 1 : -1));
+      x0 = null;
+    }, { passive: true });
+  }
+  bindWheel() {
+    let lock = false;
+    addEventListener('wheel', e => {
+      if (lock || Math.abs(e.deltaY) < 24) return;
+      lock = true; setTimeout(() => lock = false, 700);
+      this.show(this.current + (e.deltaY > 0 ? 1 : -1));
+    }, { passive: true });
+  }
+  show(i) {
+    this.current = Math.max(0, Math.min(i, this.slides.length - 1));
+    this.slides.forEach((s, idx) => {
+      s.classList.toggle('active', idx === this.current);
+      s.classList.toggle('visible', idx === this.current);
+    });
+    document.getElementById('navCnt').textContent = (this.current + 1) + ' / ' + this.slides.length;
+  }
+}
+new SlidePresentation();
+/* 底部导航按钮（播放器实例已建，通过事件委托翻页） */
+document.getElementById('navPrev').addEventListener('click', () => {
+  const e = new KeyboardEvent('keydown', { key: 'PageUp' }); dispatchEvent(e);
+});
+document.getElementById('navNext').addEventListener('click', () => {
+  const e = new KeyboardEvent('keydown', { key: 'PageDown' }); dispatchEvent(e);
+});
+
+/* ===========================================
+   行内编辑：E 键 / 左上角热区，contenteditable + localStorage
+   =========================================== */
+const editor = {
+  isActive: false,
+  toggle() {
+    this.isActive = !this.isActive;
+    document.querySelectorAll('.slide').forEach(s => {
+      s.querySelectorAll('h1,h2,h3,p,div,li,td,th,span').forEach(el => {
+        if (el.children.length === 0 || el.tagName === 'LI' || el.tagName === 'TD' || el.tagName === 'TH')
+          el.setAttribute('contenteditable', this.isActive ? 'true' : 'false');
+      });
+    });
+    const btn = document.getElementById('editToggle');
+    btn.classList.toggle('active', this.isActive);
+    btn.textContent = this.isActive ? '✓ 完成' : '✏ 编辑';
+    if (!this.isActive) this.save();
+  },
+  save() {
+    const key = 'deck-hw-scheme-' + location.pathname;
+    try { localStorage.setItem(key, document.getElementById('deckStage').innerHTML); } catch (e) {}
+  }
+};
+document.getElementById('editToggle').addEventListener('click', () => editor.toggle());
+const hotzone = document.getElementById('editHotzone'), tgl = document.getElementById('editToggle');
+let hideT = null;
+hotzone.addEventListener('mouseenter', () => { clearTimeout(hideT); tgl.classList.add('show'); });
+hotzone.addEventListener('mouseleave', () => { hideT = setTimeout(() => { if (!editor.isActive) tgl.classList.remove('show'); }, 400); });
+tgl.addEventListener('mouseenter', () => clearTimeout(hideT));
+tgl.addEventListener('mouseleave', () => { hideT = setTimeout(() => { if (!editor.isActive) tgl.classList.remove('show'); }, 400); });
+hotzone.addEventListener('click', () => editor.toggle());
+document.addEventListener('keydown', e => {
+  if ((e.key === 'e' || e.key === 'E') && !e.target.getAttribute('contenteditable')) editor.toggle();
+});
+</script>
+</body>
+</html>
