@@ -396,9 +396,9 @@ def collect_venues(state, statuses, today):
 
 # ---------------------------------------------------------------- deep read
 DEEP_COMMIT_WORDS = re.compile(
-    r"secur|boot|attest|fault|vulnerab|cve|exploit|trustzone|optee|key|crypto|sign|"
-    r"isolation|sandbox|fuzz|hardening|harden|flash|rom", re.I)
-DEEP_ISSUE_WORDS = re.compile(r"security|cve|advisory|vulnerab|exploit", re.I)
+    r"\b(secur\w*|secure|boot\w*|attest\w*|fault\w*|vulnerab\w*|cve-\d+|exploit\w*|"
+    r"trustzone|optee|\bkey\b|keygen|crypto\w*|signing|signed|signature|"
+    r"isolat\w*|sandbox\w*|fuzz\w*|harden\w*|flash\w*|\brom\b)", re.I)
 DEEP_EVENT_BASE = {"release": 12, "issue": 8, "commit": 6}
 DEEP_PRIORITY_BONUS = {"P0": 6, "P1": 3, "P2": 1}
 
@@ -441,9 +441,14 @@ def collect_deep_read(state, statuses, today):
                 return None, str(e)[:50]
 
     def fetch_atom(url):
-        """拉取 GitHub 公开 Atom feed，返回 entry 列表（dict: title/link/updated/content）。"""
+        """拉取 GitHub 公开 Atom feed，返回 entry 列表（dict: title/link/updated/content）。
+        部分端点（如 issues.atom）会校验 Accept/UA，缺失时返回 406。"""
         try:
-            root = ET.fromstring(http_get(url, timeout=20))
+            req = urllib.request.Request(url, headers={
+                "User-Agent": UA["User-Agent"],
+                "Accept": "application/atom+xml, application/xml, text/xml, */*"})
+            with urllib.request.urlopen(req, timeout=20) as r:
+                root = ET.fromstring(r.read())
         except Exception as e:
             return None, str(e)[:50]
         entries = []
@@ -458,7 +463,6 @@ def collect_deep_read(state, statuses, today):
 
     now_dt = utcnow()
     now_iso = now_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-    day_ago_iso = (now_dt - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     items, fail_repos = [], []
     checked = quiet = 0
 
@@ -493,7 +497,7 @@ def collect_deep_read(state, statuses, today):
         # P0 且 release 基准未建：当天补查一次 releases 建基准
         p0_need_release = repo_cfg["priority"] == "P0" and not prev.get("last_tag")
         new_state = {"checked_at": now_iso, "pushed_at": pushed,
-                     "last_tag": prev.get("last_tag"), "seen_issues": prev.get("seen_issues", [])}
+                     "last_tag": prev.get("last_tag")}
 
         if not first_run and not changed and not p0_need_release:
             checked += 1
@@ -521,7 +525,8 @@ def collect_deep_read(state, statuses, today):
                         new_state["last_tag"] = tag
                         break
 
-        # 2) commits feed + 3) issues feed：仅当有推送且非首跑
+        # 2) commits feed：仅当有推送且非首跑（issues.atom 已于 2026-09-10 被 GitHub
+        #    拒绝匿名访问（406），issues 通道下线；releases/commits feed 仍正常）
         if changed and not first_run and not repo_failed:
             entries, err = fetch_atom("https://github.com/%s/commits.atom" % repo)
             if err:
@@ -534,23 +539,6 @@ def collect_deep_read(state, statuses, today):
                     items.append(make_item(repo_cfg, "commit",
                         "%s 近期安全相关提交" % repo, "https://github.com/%s/commits" % repo,
                         today, "；".join(commit_lines)))
-            entries, err = fetch_atom("https://github.com/%s/issues.atom" % repo)
-            if err:
-                fail_repos.append("%s(issues %s)" % (repo, err))
-            else:
-                seen_links = set(prev.get("seen_issues", []))
-                n_issue = 0
-                for en in entries:
-                    if en["link"] in seen_links or en["updated"] < day_ago_iso:
-                        continue
-                    if DEEP_ISSUE_WORDS.search(en["title"]):
-                        items.append(make_item(repo_cfg, "issue",
-                            "%s %s" % (repo, en["title"][:80]), en["link"],
-                            en["updated"][:10], en["title"][:200]))
-                        n_issue += 1
-                    if n_issue >= 3:
-                        break
-                new_state["seen_issues"] = list(seen_links | {en["link"] for en in entries})[:200]
             time.sleep(1)  # atom feed 礼貌间隔
 
         if not repo_failed:
