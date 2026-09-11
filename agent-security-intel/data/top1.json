@@ -96,18 +96,6 @@
    "desc": "Vision-Language-Action (VLA) models have shown promising progress in language-conditioned robotic manipulation. However, existing datasets and benchmarks mainly evaluate task completion under predefined settings, offering limited insight into model reasoning u"
   },
   {
-   "kind": "deep_read",
-   "title": "op-tee/optee_os 近期安全相关提交",
-   "url": "https://github.com/op-tee/optee_os/commits",
-   "date": "2026-09-11",
-   "score": 49,
-   "tags": [
-    "机密计算",
-    "硬件抓手"
-   ],
-   "desc": "crypto: asu: selective fallback in RSA key pair generation；crypto: asu: fix RSA key-pair import field offset for public exponent；crypto: asu: align command structs with ASU firmware"
-  },
-  {
    "kind": "paper",
    "title": "Architecting the Secure AI-SOC: A Neurosymbolic Framework for Pipeline Integrity and Threat Mitigation",
    "url": "http://arxiv.org/abs/2609.10707v1",
@@ -149,6 +137,18 @@
     "产业"
    ],
    "desc": "LLM agents complete tasks by issuing sequences of tool calls, and every observation they read is a channel through which an indirect prompt injection can enter. A successful injection has a characteristic shape when the trajectory is read in order: a benign pr"
+  },
+  {
+   "kind": "paper",
+   "title": "HermiCache: Enclave-Aware Cache Replacement for Trusted Execution Environments",
+   "url": "http://arxiv.org/abs/2609.10634v1",
+   "date": "2026-09-09",
+   "score": 41,
+   "tags": [
+    "机密计算",
+    "汽车/具身"
+   ],
+   "desc": "Trusted Execution Environments (TEEs) protect enclave memory from untrusted software but remain vulnerable to cache-based side-channel attacks due to shared microarchitectural resources. Existing countermeasures use techniques such as cache partitioning or ran"
   }
  ]
 }
