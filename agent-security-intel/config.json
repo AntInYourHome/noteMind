@@ -15,7 +15,7 @@
     "pages": [
       { "name": "IEEE S&P 2026", "url": "https://sp2026.ieee-security.org/accepted-papers.html", "parser": "list_group" },
       { "name": "IEEE S&P 2027", "url": "https://sp2027.ieee-security.org/accepted-papers.html", "parser": "list_group" },
-      { "name": "NDSS 2027", "url": "https://www.ndss-symposium.org/ndss2027/accepted-papers/", "parser": "single_paper" },
+      { "name": "NDSS 2027", "url": "https://www.ndss-symposium.org/ndss2027/accepted-papers/", "parser": "single_paper", "enabled": false, "note": "该 URL 当前返回 NDSS 2017 旧内容（站内回退），待真实列表发布后启用" },
       { "name": "USENIX Security 2026", "url": "https://www.usenix.org/conference/usenixsecurity26/technical-sessions", "parser": "list_group", "enabled": false, "note": "议程页结构复杂暂未接入；接收信号由 arXiv comment 通道覆盖" }
     ]
   },
