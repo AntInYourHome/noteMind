@@ -1,3 +1,12 @@
+**2026-09-13 点评：**
+
+**2026-09-13（手动触发）**：
+
+1. **硬件抓手双响，且性质升级**：第 9 名 OpenHarmony iTrustee REE lite（「TEE agent service」——大厂官方把 agent 服务放进可信执行环境）与第 10 名 vla-shield（VLA 实时安全过滤层，模型无关）——前者是「裁决下沉」的产业实现迹象，后者让具身安全过滤器开源赛道一周内有了两个选手（与 Cudro 同位）。主题从「我们的推导」变成「多方可观测的收敛」。
+2. **Anthropic 威胁报告的余波进入榜单语境**：ECC（agent harness 增强件）进榜提醒——同一套 harness 生态（skills/记忆/自动化）正被攻击者（GTG-20006 用 Claude Code skills 驱动工作流）与防御者同时使用，harness 的双刃性应作为 L2 的常设观察维度。
+3. **L2 工具四象限成型**：运行时裁决（Prismor）/ egress（pipelock）/ 上架前扫描（SkillSpector、mcp-triage）/ 平台化聚合（Top1 AI-Infra-Guard）——本周榜单反复验证，防御侧的格局判断可以定稿进 docs。
+4. **精读静默、顶会静默均属正常**：周末无 release/push 增量；S&P 2027 列表未公布。NDSS 假基线事件后顶会雷达只剩 S&P 2026 存量+arXiv comment 双通道在岗。
+
 **2026-09-12 点评：**
 
 **2026-09-12（手动触发）**：
