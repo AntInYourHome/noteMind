@@ -31,6 +31,16 @@ py scripts/graph_store.py --stats --cooccur 15 --recurrence   # 图查询
 py scripts/graph_store.py --neighbours safety
 py scripts/graph_store.py --export      # 导出 data/graph/graph.json（可视化用）
 
+# Neo4j 后端（本机已部署：C:\tools\neo4j-community-5.26.0 + MS OpenJDK 21 aarch64）
+bash /c/tools/neo4j-community-5.26.0/start.sh          # 启动（bolt://127.0.0.1:7687，neo4j/intelgraph2026）
+py scripts/neo4j_store.py --migrate                    # SQLite 图 → Neo4j 同步（MERGE 幂等）
+py scripts/neo4j_store.py --recurrence --cooccur 15 --neighbours safety   # Cypher 查询
+# 浏览器 http://127.0.0.1:7474 打开 Neo4j Browser 可视化：
+#   MATCH p=(d:day)-[t:TOP]->(i:item) RETURN p LIMIT 50
+
+# NebulaGraph 远程后端（备用于 Linux/x86_64 服务器；deploy/nebula/docker-compose.yml）
+py scripts/nebula_store.py --host <IP> --migrate       # 服务端就绪后一键迁移
+
 # 仓库内一键同步（切 daily-intel 分支+采集 / 提交推送）
 bash scripts/sync_intel.sh collect
 bash scripts/sync_intel.sh publish
