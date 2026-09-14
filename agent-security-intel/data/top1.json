@@ -2,7 +2,7 @@
  "kind": "gh_active",
  "title": "Tencent/AI-Infra-Guard",
  "url": "https://github.com/Tencent/AI-Infra-Guard",
- "stars": 6248,
+ "stars": 6257,
  "star_delta": 0,
  "pushed_at": "2026-09-11",
  "created_at": "2024-12-25",
@@ -46,7 +46,7 @@
    "kind": "gh_active",
    "title": "luckyPipewrench/pipelock",
    "url": "https://github.com/luckyPipewrench/pipelock",
-   "date": "2026-09-13",
+   "date": "2026-09-14",
    "score": 27,
    "tags": [
     "AgentOS",
@@ -54,19 +54,6 @@
     "汽车/具身"
    ],
    "desc": "Open-source AI agent firewall for MCP security and agent egress. Scans mediated HTTP, MCP, A2A, and WebSocket traffic for exfiltration, SSRF, and prompt injection, and emits mediator-signed action receipts: verifiable au"
-  },
-  {
-   "kind": "gh_new",
-   "title": "aptos-labs/confidential-inference-router",
-   "url": "https://github.com/aptos-labs/confidential-inference-router",
-   "date": "2026-09-12",
-   "score": 24,
-   "tags": [
-    "机密计算",
-    "完整性",
-    "产业"
-   ],
-   "desc": "Release/attestation repo for the Aptos confidential-inference router CVM (GPU-less TDX front-end; see aptos-labs/atlas deploy/h200-inference)"
   },
   {
    "kind": "gh_new",
@@ -130,6 +117,18 @@
     "产业"
    ],
    "desc": "TEE agent service | 提供TEE代理服务"
+  },
+  {
+   "kind": "gh_new",
+   "title": "yoyoho6/-Lifelong-Vision-Language-Action-Learning-for-Robotic-Manipulation",
+   "url": "https://github.com/yoyoho6/-Lifelong-Vision-Language-Action-Learning-for-Robotic-Manipulation",
+   "date": "2026-09-07",
+   "score": 23,
+   "tags": [
+    "AgentOS",
+    "汽车/具身"
+   ],
+   "desc": "LifelongVLA is a cache-efficient lifelong VLA framework for robotic manipulation. It uses dual-timescale LoRA adapters and task-aware gating to balance rapid skill acquisition with stable retention. A stochastic replay s"
   },
   {
    "kind": "gh_new",
