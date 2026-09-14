@@ -1,0 +1,31 @@
+version: "3.8"
+# NebulaGraph 单机部署（Linux 服务器 / 任何 x86_64 Docker 环境）
+# 用法：docker compose up -d && sleep 30 && docker compose exec nebula-console ...
+# 本机（ARM64 Windows）无法运行服务端，此文件供远程部署。
+services:
+  metad0:
+    image: vesoft/nebula-metad:v3.8.0
+    environment:
+      USER: root
+    command: --meta_server_addrs=metad0:9559 --local_ip=metad0 --ws_ip=metad0 --port=9559
+    ports: ["9559", "19559"]
+    volumes: [./data/meta0:/data/meta]
+  storaged0:
+    image: vesoft/nebula-storaged:v3.8.0
+    environment:
+      USER: root
+    command: --meta_server_addrs=metad0:9559 --local_ip=storaged0 --ws_ip=storaged0 --port=9779
+    ports: ["9779", "19779"]
+    volumes: [./data/storage0:/data/storage]
+    depends_on: [metad0]
+  graphd:
+    image: vesoft/nebula-graphd:v3.8.0
+    environment:
+      USER: root
+    command: --meta_server_addrs=metad0:9559 --local_ip=graphd --ws_ip=graphd --port=9669
+    ports: ["9669:9669", "19669"]
+    depends_on: [metad0]
+  nebula-console:
+    image: vesoft/nebula-console:v3.5.0
+    entrypoint: ["sleep", "infinity"]
+    depends_on: [graphd]
