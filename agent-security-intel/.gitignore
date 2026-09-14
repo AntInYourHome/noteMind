@@ -3,3 +3,4 @@ data/latest-items.json
 __pycache__/
 *.pyc
 !config.json
+data/graph/

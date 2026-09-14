@@ -24,6 +24,13 @@ py scripts/collect.py --skip-gh --skip-arxiv
 # 把 LLM 分析（data/analysis.json）填入今日报告（幂等，可重复调用）
 py scripts/collect.py --apply-analysis data/analysis.json
 
+# 每日图谱沉淀：条目/关键词/标签/仓库入知识图谱（SQLite 图模式，零依赖）
+py scripts/graph_store.py                # 追加当日（幂等）
+py scripts/graph_store.py --rebuild     # 重建（当日全量 + 历史报告 Top10 回填）
+py scripts/graph_store.py --stats --cooccur 15 --recurrence   # 图查询
+py scripts/graph_store.py --neighbours safety
+py scripts/graph_store.py --export      # 导出 data/graph/graph.json（可视化用）
+
 # 仓库内一键同步（切 daily-intel 分支+采集 / 提交推送）
 bash scripts/sync_intel.sh collect
 bash scripts/sync_intel.sh publish
