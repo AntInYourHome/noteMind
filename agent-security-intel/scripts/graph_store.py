@@ -68,6 +68,7 @@ def put_edge(conn, src, dst, etype, day, weight=1, props=None):
 def load_day(conn, items, day):
     """一个采集日的全部条目入图（重跑同日 = 覆盖，幂等）。"""
     conn.execute("DELETE FROM edge WHERE day=?", (day,))
+    put_node(conn, "day:" + day, "day", day)
     for it in items:
         url = it.get("url") or ""
         title = (it.get("title") or "?").strip()
@@ -120,6 +121,7 @@ def backfill_reports(conn):
         if not m:
             continue
         day = m.group(1)
+        put_node(conn, "day:" + day, "day", day)
         txt = open(os.path.join(REPORT_DIR, fn), encoding="utf-8").read()
         for mm in TOP_LINE.finditer(txt):
             rank, tags, title = int(mm.group(1)), mm.group(2), mm.group(3).strip()
