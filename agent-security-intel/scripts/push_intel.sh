@@ -28,5 +28,9 @@ else
   git commit -m "intel: ${TODAY} 每日情报更新" --quiet
 fi
 
-GIT_TERMINAL_PROMPT=0 git push origin daily-intel
+GIT_TERMINAL_PROMPT=0 git push origin daily-intel || {
+  echo "(proxy push failed, retrying direct connection)"
+  sleep 3
+  GIT_TERMINAL_PROMPT=0 git -c http.proxy= -c https.proxy= push origin daily-intel
+}
 echo "pushed: $(git rev-parse --short HEAD) -> origin/daily-intel"
