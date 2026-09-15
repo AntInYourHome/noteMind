@@ -31,6 +31,7 @@ fi
 GIT_TERMINAL_PROMPT=0 git push origin daily-intel || {
   echo "(proxy push failed, retrying direct connection)"
   sleep 3
-  GIT_TERMINAL_PROMPT=0 git -c http.proxy= -c https.proxy= push origin daily-intel
+  # 注意：全局配置是 URL 级代理（http.https://github.com.proxy），必须显式清空它
+  GIT_TERMINAL_PROMPT=0 git -c http.https://github.com.proxy= -c http.proxy= -c https.proxy= push origin daily-intel
 }
 echo "pushed: $(git rev-parse --short HEAD) -> origin/daily-intel"
