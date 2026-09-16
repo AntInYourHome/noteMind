@@ -30,8 +30,15 @@ fi
 
 GIT_TERMINAL_PROMPT=0 git push origin daily-intel || {
   echo "(proxy push failed, retrying direct connection)"
-  sleep 3
-  # 注意：全局配置是 URL 级代理（http.https://github.com.proxy），必须显式清空它
-  GIT_TERMINAL_PROMPT=0 git -c http.https://github.com.proxy= -c http.proxy= -c https.proxy= push origin daily-intel
+  # 直连重试 3 次（github.com 直连常间歇性失败，本地/远端代理也可能随时恢复）
+  for i in 1 2 3; do
+    sleep 20
+    GIT_TERMINAL_PROMPT=0 git -c http.https://github.com.proxy= -c http.proxy= -c https.proxy= push origin daily-intel && break
+    # 直连失败后顺手探测代理是否恢复，恢复则走代理再推
+    if curl -s -o /dev/null --max-time 8 -x http://127.0.0.1:7890 https://api.github.com/zen 2>/dev/null; then
+      GIT_TERMINAL_PROMPT=0 git push origin daily-intel && break
+    fi
+    [ "$i" = "3" ] && echo "PUSH_FAILED: 所有重试均失败，内容已提交到本地 noteMind 克隆（daily-intel 分支），网络恢复后重跑本脚本即可" && exit 0
+  done
 }
 echo "pushed: $(git rev-parse --short HEAD) -> origin/daily-intel"
