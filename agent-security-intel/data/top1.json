@@ -1,32 +1,42 @@
 {
- "kind": "gh_new",
- "title": "rzc156/Embodied-Robot-Intelligence",
- "url": "https://github.com/rzc156/Embodied-Robot-Intelligence",
- "stars": 4,
- "star_delta": 0,
- "pushed_at": "2026-09-17",
- "created_at": "2026-09-17",
- "desc": "A research-grade textbook and engineering handbook on embodied robot intelligence, covering robotics foundations, manipulation, locomotion, loco-manipulation, VLA, world models, humanoid control, agentic robotics, and ge",
- "lang": "-",
- "score": 40,
+ "kind": "deep_read",
+ "priority": "P0",
+ "why": "TrustZone TEE OS，安全岛软件栈参照",
+ "event": "commit",
+ "title": "op-tee/optee_os 近期安全相关提交",
+ "url": "https://github.com/op-tee/optee_os/commits",
+ "date": "2026-09-28",
+ "desc": "core: cryp: allow secret keys in opaque driver key containers；drivers: crypto: caam: validate deserialized key size and declare ove…",
+ "score": 53,
  "hits": [
-  "agentic",
-  "agent",
-  "VLA",
-  "robot",
-  "机器人",
-  "具身"
+  "TEE",
+  "secret",
+  "key",
+  "安全岛",
+  "TrustZone",
+  "OP-TEE"
  ],
  "tags": [
-  "Agent安全",
-  "汽车/具身"
+  "机密计算",
+  "硬件抓手"
  ],
- "date": "2026-09-17",
  "detail": {
-  "fetched": "# Embodied-Robot-Intelligence\nA research-grade textbook and engineering handbook on embodied robot intelligence, covering robotics foundations, manipulation, locomotion, loco-manipulation, VLA, world models, humanoid control, agentic robotics, and generalist embodied AI. 中文描述： 面向具身机器人智能的研究级教材与工程手册，系统覆盖机器人数学基础、操作、运动控制、loco-manipulation、VLA、世界模型、人形机器人、Agentic Robotics 与通用具身智能。\n",
-  "source_type": "gh_new"
+  "fetched": "",
+  "source_type": "deep_read"
  },
  "runner_ups": [
+  {
+   "kind": "gh_new",
+   "title": "rzc156/Embodied-Robot-Intelligence",
+   "url": "https://github.com/rzc156/Embodied-Robot-Intelligence",
+   "date": "2026-09-17",
+   "score": 40,
+   "tags": [
+    "Agent安全",
+    "汽车/具身"
+   ],
+   "desc": "A research-grade textbook and engineering handbook on embodied robot intelligence, covering robotics foundations, manipulation, locomotion, loco-manipulation, VLA, world models, humanoid control, agentic robotics, and ge"
+  },
   {
    "kind": "gh_active",
    "title": "Agent-Threat-Rule/agent-threat-rules",
@@ -58,7 +68,7 @@
    "kind": "gh_active",
    "title": "Tencent/AI-Infra-Guard",
    "url": "https://github.com/Tencent/AI-Infra-Guard",
-   "date": "2026-09-24",
+   "date": "2026-09-28",
    "score": 30,
    "tags": [
     "AgentOS",
@@ -108,39 +118,31 @@
   },
   {
    "kind": "gh_new",
-   "title": "Aaravkhanal/VIBE-SHIELD",
-   "url": "https://github.com/Aaravkhanal/VIBE-SHIELD",
-   "date": "2026-09-25",
-   "score": 26,
-   "tags": [
-    "Agent安全",
-    "汽车/具身"
-   ],
-   "desc": "VIBE SHIELD — Autonomous multi-agent security & quality scanner for AI/vibe-coded apps. Crawls, tests, and identifies vulnerabilities across QA, security, business logic, AI prompt injection, API/auth flows, and more wit"
-  },
-  {
-   "kind": "gh_new",
-   "title": "hazemhagrass/ai-compute",
-   "url": "https://github.com/hazemhagrass/ai-compute",
+   "title": "alphaparkinc/genpark-constant-time-crypto-validator-skill",
+   "url": "https://github.com/alphaparkinc/genpark-constant-time-crypto-validator-skill",
    "date": "2026-09-28",
-   "score": 22,
+   "score": 18,
    "tags": [
     "AgentOS",
     "Agent安全",
+    "侧信道攻击",
     "汽车/具身"
    ],
-   "desc": "A skill library for coding agents: 98 skills across engineering, security, data, writing and finance. Every skill validated in CI and scanned for prompt injection before publish. MCP guides included."
+   "desc": "Side-channel timing attack defense primitive providing constant-time bitwise and string digest comparison for agent security credentials."
   },
   {
-   "kind": "deep_read",
-   "title": "zephyrproject-rtos/zephyr 近期安全相关提交",
-   "url": "https://github.com/zephyrproject-rtos/zephyr/commits",
+   "kind": "gh_new",
+   "title": "Alpha-Park/genpark-constant-time-crypto-validator-skill",
+   "url": "https://github.com/Alpha-Park/genpark-constant-time-crypto-validator-skill",
    "date": "2026-09-28",
-   "score": 32,
+   "score": 18,
    "tags": [
-    "硬件抓手"
+    "AgentOS",
+    "Agent安全",
+    "侧信道攻击",
+    "汽车/具身"
    ],
-   "desc": "scripts: coredump: decode thread priorities as signed"
+   "desc": "Side-channel timing attack defense primitive providing constant-time bitwise and string digest comparison for agent security credentials."
   }
  ]
 }
