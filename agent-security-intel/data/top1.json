@@ -1,38 +1,77 @@
 {
- "kind": "gh_active",
- "title": "Tencent/AI-Infra-Guard",
- "url": "https://github.com/Tencent/AI-Infra-Guard",
- "stars": 6257,
+ "kind": "gh_new",
+ "title": "rzc156/Embodied-Robot-Intelligence",
+ "url": "https://github.com/rzc156/Embodied-Robot-Intelligence",
+ "stars": 4,
  "star_delta": 0,
- "pushed_at": "2026-09-11",
- "created_at": "2024-12-25",
- "desc": "A full-stack AI Red Teaming platform securing AI ecosystems via Agent Scan, Skills Scan, MCP scan, AI Infra scan and LLM jailbreak evaluation.",
- "lang": "Python",
- "score": 30,
+ "pushed_at": "2026-09-17",
+ "created_at": "2026-09-17",
+ "desc": "A research-grade textbook and engineering handbook on embodied robot intelligence, covering robotics foundations, manipulation, locomotion, loco-manipulation, VLA, world models, humanoid control, agentic robotics, and ge",
+ "lang": "-",
+ "score": 40,
  "hits": [
-  "MCP",
-  "jailbreak",
+  "agentic",
   "agent",
-  "ECU",
-  "LLM",
-  "red team"
+  "VLA",
+  "robot",
+  "机器人",
+  "具身"
  ],
  "tags": [
-  "AgentOS",
   "Agent安全",
   "汽车/具身"
  ],
- "date": "2026-09-11",
+ "date": "2026-09-17",
  "detail": {
-  "fetched": "<p align=\"center\">\n    <h1 align=\"center\"><img vertical-align=\"middle\" width=\"400px\" src=\"img/logo-full-new.png\" alt=\"A.I.G\"/></h1>\n</p>\n<p align=\"center\">\n  <a href=\"https://tencent.github.io/AI-Infra-Guard/\">📖 Documentation</a> &nbsp;|&nbsp;\n  🌐 <a href=\"./readme/README_ZH.md\">🇨🇳 中文</a> · <a href=\"./readme/README_JA.md\">🇯🇵 日本語</a> · <a href=\"./readme/README_ES.md\">🇪🇸 Español</a> · <a href=\"./readme/README_DE.md\">🇩🇪 Deutsch</a> · <a href=\"./readme/README_FR.md\">🇫🇷 Français</a> · <a href=\"./readme/README_KR.md\">🇰🇷 한국어</a> · <a href=\"./readme/README_PT.md\">🇧🇷 Português</a> · <a href=\"./readme/README_RU.md\">🇷🇺 Русский</a>\n</p>\n<p align=\"center\">\n    <a href=\"https://github.com/tencent/AI-Infra-Guard/stargazers\">\n      <img src=\"https://img.shields.io/github/stars/tencent/AI-Infra-Guard?style=social\" alt=\"GitHub stars\">\n    </a>\n    <a href=\"https://github.com/Tencent/AI-Infra-Guard\">\n        <img alt=\"GitHub downloads\" src=\"https://img.shields.io/github/downloads/Tencent/AI-Infra-Guard/total\">\n    </a>\n    <a href=\"https://github.com/Tencent/AI-Infra-Guard\">\n        <img alt=\"docker pulls\" src=\"https://img.shields.io/docker/pulls/zhuquelab/aig-server.svg?color=gold\">\n    </a>\n    <a href=\"https://github.com/Tencent/AI-Infra-Guard\">\n        <img alt=\"Release\" src=\"https://img.shields.io/github/v/release/Tencent/AI-Infra-Guard?color=green\">\n    </a>\n    <a href=\"https://deepwiki.com/Tencent/AI-Infra-Guard\">\n       <img src=\"https://deepwiki.com/badge.svg\" alt=\"Ask DeepWiki\">\n    </a>\n</p>\n<p align=\"center\">\n    <a href=\"https://clawhub.ai/aigsec/edgeone-clawscan\" target=\"_blank\">\n       <img src=\"https://img.shields.io/badge/ClawHub-EdgeOne%20ClawScan-a870dc\" alt=\"EdgeOne ClawScan\">\n    </a>\n    <a href=\"https://clawhub.ai/aigsec/edgeone-skill-scanner\" target=\"_blank\">\n       <img src=\"https://img.shields.io/badge/ClawHub-EdgeOne%20Skill%20Scanner-2ea44f\" alt=\"EdgeOne Skill Scanner\">\n    </a>\n    <a href=\"https://clawhub.ai/aigsec/aig-scanner\" target=\"_blank\">\n       <img src=\"https://img.shields.io/badge/ClawHub-AIG%20Scanner-e6a817\" alt=\"AIG Scanner\">\n    </a>\n</p>\n<p align=\"center\">\n    <a href=\"https://github.com/openclaw/clawscan\" target=\"_blank\">\n       <img src=\"https://img.shields.io/badge/OpenClaw-Recommended-ff6b6b\" alt=\"OpenClaw Recommended\">\n    </a>\n</p>\n<p align=\"center\">\n  <a href=\"https://trendshift.io/repositories/13637\" target=\"_blank\"><picture><source media=\"(prefers-color-scheme: dark)\" srcset=\"https://trendshift.io/api/badge/repositories/13637\"><source media=\"(prefers-color-scheme: light)\" srcset=\"https://trendshift.io/api/badge/repositories/13637\"><img src=\"https://trendshift.io/api/badge/repositories/13637\" alt=\"Tencent%2FAI-Infra-Guard | Trendshift\" width=\"250\" height=\"55\"/></picture></a>&nbsp;\n  <a href=\"https://www.blackhat.com/eu-25/arsenal/schedule/index.html#aigai-infra-guard-48381\" target=\"_blank\"><img src=\"img/blackhat.png\" alt=\"Tencent%2FAI-Infra-Guard | blackhat\" width=\"175\" height=\"55\"/></a>&nbsp;\n  <a href=\"https://github.com/deepseek-ai/awesome-deepseek-integration\" target=\"_blank\"><img src=\"img/awesome-deepseek.png\" alt=\"Tencent%2FAI-Infra-Guard | awesome-deepseek-integration\" width=\"273\" height=\"55\"/></a>\n</p>\n\n<br>\n\n<p align=\"center\">\n    <h2 align=\"center\">🚀 AI Red Teaming Platform by Tencent Zhuque Lab</h2>\n</p>\n\n<b>A.I.G (AI-Infra-Guard)</b> integrates capabilities such as ClawScan(OpenClaw Security Scan), Agent Scan，AI infra vulnerability scan, MCP Server & Agent Skills scan, and Jailbreak Evaluation, aiming to provide users with the most comprehensive, intelligent, and user-friendly solution for AI security risk self-examination.\n\n<p>\n  We are committed to making A.I.G(AI-Infra-Guard) the industry-leading AI red teaming platform. More stars help this project reach a wider audience, attracting more developers to contribute, which accelerates iteration and improvement. Your star is crucial to us!\n</p>\n<p align=\"center\">\n  <a href=\"https://github.com/Tencent/AI-Infra-Guard\">\n      <img src=\"https://img.shields.io/badge/⭐-Give%20us%20a%20Star-yellow?style=for-the-badge&logo=github\" alt=\"Give us a Star\">\n  </a>\n</p>\n\n<br>\n\n## 📋 User Feedback Survey\n\nHelp us improve A.I.G! Please take 3-5 minutes to fill out our [User Feedback Survey](https://doc.weixin.qq.com/forms/AJEAIQdfAAoAFkA0QbdAFwCNcKSO0BFLf). Users who provide high-quality feedback and leave a valid email address will receive an exclusive Tencent souvenir gift.\n\n<br>\n\n## 🚀 What's New\n\n- **2026-09-10** · [v4.6.1](https://github.com/Tencent/AI-Infra-Guard/releases/tag/v4.6.1) — API Checker: expanded model fingerprint coverage (Gemini 2.5/3.1, Gemma 2/3/4, GLM-5.3 & GLM-5.3-Flash); MCP-Scan reliability: flags empty/incomplete scans, preserves security findings during context compaction, surfaces underlying connection errors; corrected mislabeled CVE product names.\n- **2026-08-26** · [v4.6.0](https://github.com/Tencent/AI-Infra-Guard/releases/tag/v4.6.0) — LLM API poisoning detection (multi-probe black-box audit for model substitution & backdoor risks); Agent-Scan v5.0.0 mutation engine refactor; vuln library expanded to 146 AI components & 2000+ CVE rules; MCP/Skill scan stability & compatibility fixes.\n- **2026-08-17** · [v4.5.2](https://github.com/Tencent/AI-Infra-Guard/releases/tag/v4.5.2) — Skill-Scan: .pyc bytecode bypass detection + charset smuggling defense; MCP-Scan: RCE prevention via tool whitelisting in dynamic mode; new SkillJack research project; vuln library expanded to 2000+ CVE rules.\n- **2026-07-30** · [v4.5.1](https://github.com/Tencent/AI-Infra-Guard/releases/tag/v4.5.1) — Jailbreak Evaluation: 4 multi-turn jailbreak attacks (Many-Shot, PAIR, GOAT, ActorAttack); Agent-Scan: 5 new OWASP skills + web-exfiltration detection (10 skills total); MCP-Scan: 4 new security rules\n- **2026-07-27** · [v4.5.0](https://github.com/Tencent/AI-Infra-Guard/releases/tag/v4.5.0) — AI Security Skill Market launched (3 official skills); frontend fully open-sourced; Skill scan engine upgraded (9 risk c",
-  "source_type": "gh_active"
+  "fetched": "# Embodied-Robot-Intelligence\nA research-grade textbook and engineering handbook on embodied robot intelligence, covering robotics foundations, manipulation, locomotion, loco-manipulation, VLA, world models, humanoid control, agentic robotics, and generalist embodied AI. 中文描述： 面向具身机器人智能的研究级教材与工程手册，系统覆盖机器人数学基础、操作、运动控制、loco-manipulation、VLA、世界模型、人形机器人、Agentic Robotics 与通用具身智能。\n",
+  "source_type": "gh_new"
  },
  "runner_ups": [
   {
    "kind": "gh_active",
+   "title": "Agent-Threat-Rule/agent-threat-rules",
+   "url": "https://github.com/Agent-Threat-Rule/agent-threat-rules",
+   "date": "2026-09-27",
+   "score": 37,
+   "tags": [
+    "AgentOS",
+    "Agent安全",
+    "汽车/具身"
+   ],
+   "desc": "Open detection-rule standard for AI agent security threats — like Sigma, but for AI agents. Executable, testable rules for prompt injection, tool poisoning, context exfiltration and MCP attacks. Merged into open-source p"
+  },
+  {
+   "kind": "gh_active",
+   "title": "PrismorSec/prismor",
+   "url": "https://github.com/PrismorSec/prismor",
+   "date": "2026-09-27",
+   "score": 29,
+   "tags": [
+    "AgentOS",
+    "Agent安全",
+    "侧信道攻击",
+    "汽车/具身"
+   ],
+   "desc": " Self-hosted runtime control plane for AI agents. Observe or HITL approve or Block rogue tool calls before it executes: secret leaks, prompt injection, supply chain etc in a local dashboard. Agent agnostic (Claude, codex"
+  },
+  {
+   "kind": "gh_active",
+   "title": "Tencent/AI-Infra-Guard",
+   "url": "https://github.com/Tencent/AI-Infra-Guard",
+   "date": "2026-09-24",
+   "score": 30,
+   "tags": [
+    "AgentOS",
+    "Agent安全",
+    "汽车/具身"
+   ],
+   "desc": "A full-stack AI Red Teaming platform securing AI ecosystems via Agent Scan, Skills Scan, MCP scan, AI Infra scan and LLM jailbreak evaluation."
+  },
+  {
+   "kind": "gh_active",
    "title": "NVIDIA/SkillSpector",
    "url": "https://github.com/NVIDIA/SkillSpector",
-   "date": "2026-09-12",
+   "date": "2026-09-26",
    "score": 26,
    "tags": [
     "AgentOS",
@@ -46,7 +85,7 @@
    "kind": "gh_active",
    "title": "luckyPipewrench/pipelock",
    "url": "https://github.com/luckyPipewrench/pipelock",
-   "date": "2026-09-14",
+   "date": "2026-09-28",
    "score": 27,
    "tags": [
     "AgentOS",
@@ -57,90 +96,51 @@
   },
   {
    "kind": "gh_new",
-   "title": "GauthamMK-0/Cudro",
-   "url": "https://github.com/GauthamMK-0/Cudro",
-   "date": "2026-09-09",
-   "score": 27,
+   "title": "Lin-Murphy/Awesome-Robot-Agents",
+   "url": "https://github.com/Lin-Murphy/Awesome-Robot-Agents",
+   "date": "2026-09-23",
+   "score": 26,
    "tags": [
-    "汽车/具身",
-    "硬件抓手"
+    "Agent安全",
+    "汽车/具身"
    ],
-   "desc": "Runtime JIT constraint compiler and manifold projection solver for real-time robotics and VLA safety filters"
+   "desc": "A source-aware directory of Embodied AI agents, LLM/VLM systems, VLA models, and robotic manipulation projects."
   },
   {
    "kind": "gh_new",
-   "title": "alphaparkinc/genpark-adversarial-redteam-prompt-injection-fuzzer-skill",
-   "url": "https://github.com/alphaparkinc/genpark-adversarial-redteam-prompt-injection-fuzzer-skill",
-   "date": "2026-09-06",
-   "score": 25,
+   "title": "Aaravkhanal/VIBE-SHIELD",
+   "url": "https://github.com/Aaravkhanal/VIBE-SHIELD",
+   "date": "2026-09-25",
+   "score": 26,
    "tags": [
-    "AgentOS",
-    "Agent安全"
+    "Agent安全",
+    "汽车/具身"
    ],
-   "desc": "GenPark AI Agent Skill - Multi-turn jailbreak and indirect prompt injection fuzzer evaluating LLM agent safety guardrails."
+   "desc": "VIBE SHIELD — Autonomous multi-agent security & quality scanner for AI/vibe-coded apps. Crawls, tests, and identifies vulnerabilities across QA, security, business logic, AI prompt injection, API/auth flows, and more wit"
   },
   {
    "kind": "gh_new",
-   "title": "Alpha-Park/genpark-adversarial-redteam-prompt-injection-fuzzer-skill",
-   "url": "https://github.com/Alpha-Park/genpark-adversarial-redteam-prompt-injection-fuzzer-skill",
-   "date": "2026-09-06",
-   "score": 25,
-   "tags": [
-    "AgentOS",
-    "Agent安全"
-   ],
-   "desc": "GenPark AI Agent Skill - Multi-turn jailbreak and indirect prompt injection fuzzer evaluating LLM agent safety guardrails."
-  },
-  {
-   "kind": "gh_active",
-   "title": "affaan-m/ECC",
-   "url": "https://github.com/affaan-m/ECC",
-   "date": "2026-09-12",
+   "title": "hazemhagrass/ai-compute",
+   "url": "https://github.com/hazemhagrass/ai-compute",
+   "date": "2026-09-28",
    "score": 22,
    "tags": [
     "AgentOS",
     "Agent安全",
     "汽车/具身"
    ],
-   "desc": "The agent harness performance optimization system. Skills, instincts, memory, security, and research-first development for Claude Code, Codex, Opencode, Cursor and beyond."
+   "desc": "A skill library for coding agents: 98 skills across engineering, security, data, writing and finance. Every skill validated in CI and scanned for prompt injection before publish. MCP guides included."
   },
   {
-   "kind": "gh_active",
-   "title": "openharmony/security_itrustee_ree_lite",
-   "url": "https://github.com/openharmony/security_itrustee_ree_lite",
-   "date": "2026-09-07",
-   "score": 18,
+   "kind": "deep_read",
+   "title": "zephyrproject-rtos/zephyr 近期安全相关提交",
+   "url": "https://github.com/zephyrproject-rtos/zephyr/commits",
+   "date": "2026-09-28",
+   "score": 32,
    "tags": [
-    "Agent安全",
-    "机密计算",
-    "汽车/具身",
-    "产业"
-   ],
-   "desc": "TEE agent service | 提供TEE代理服务"
-  },
-  {
-   "kind": "gh_new",
-   "title": "yoyoho6/-Lifelong-Vision-Language-Action-Learning-for-Robotic-Manipulation",
-   "url": "https://github.com/yoyoho6/-Lifelong-Vision-Language-Action-Learning-for-Robotic-Manipulation",
-   "date": "2026-09-07",
-   "score": 23,
-   "tags": [
-    "AgentOS",
-    "汽车/具身"
-   ],
-   "desc": "LifelongVLA is a cache-efficient lifelong VLA framework for robotic manipulation. It uses dual-timescale LoRA adapters and task-aware gating to balance rapid skill acquisition with stable retention. A stochastic replay s"
-  },
-  {
-   "kind": "gh_new",
-   "title": "Joword/vla-shield",
-   "url": "https://github.com/Joword/vla-shield",
-   "date": "2026-09-11",
-   "score": 23,
-   "tags": [
-    "汽车/具身",
     "硬件抓手"
    ],
-   "desc": "a model-agnostic, real-time safety filter layer for Vision-Language-Action (VLA) policies"
+   "desc": "scripts: coredump: decode thread priorities as signed"
   }
  ]
 }
