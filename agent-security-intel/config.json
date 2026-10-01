@@ -13,31 +13,115 @@
     "min_score": 6,
     "top_show": 10,
     "pages": [
-      { "name": "IEEE S&P 2026", "url": "https://sp2026.ieee-security.org/accepted-papers.html", "parser": "list_group" },
-      { "name": "IEEE S&P 2027", "url": "https://sp2027.ieee-security.org/accepted-papers.html", "parser": "list_group" },
-      { "name": "NDSS 2027", "url": "https://www.ndss-symposium.org/ndss2027/accepted-papers/", "parser": "single_paper", "enabled": false, "note": "该 URL 当前返回 NDSS 2017 旧内容（站内回退），待真实列表发布后启用" },
-      { "name": "USENIX Security 2026", "url": "https://www.usenix.org/conference/usenixsecurity26/technical-sessions", "parser": "list_group", "enabled": false, "note": "议程页结构复杂暂未接入；接收信号由 arXiv comment 通道覆盖" }
+      {
+        "name": "IEEE S&P 2026",
+        "url": "https://sp2026.ieee-security.org/accepted-papers.html",
+        "parser": "list_group"
+      },
+      {
+        "name": "IEEE S&P 2027",
+        "url": "https://sp2027.ieee-security.org/accepted-papers.html",
+        "parser": "list_group"
+      },
+      {
+        "name": "NDSS 2027",
+        "url": "https://www.ndss-symposium.org/ndss2027/accepted-papers/",
+        "parser": "single_paper",
+        "enabled": false,
+        "note": "该 URL 当前返回 NDSS 2017 旧内容（站内回退），待真实列表发布后启用"
+      },
+      {
+        "name": "USENIX Security 2026",
+        "url": "https://www.usenix.org/conference/usenixsecurity26/technical-sessions",
+        "parser": "list_group",
+        "enabled": false,
+        "note": "议程页结构复杂暂未接入；接收信号由 arXiv comment 通道覆盖"
+      }
     ]
   },
   "deep_read": {
     "p2_weekday": 0,
     "repos": [
-      { "repo": "mcu-tools/mcuboot", "priority": "P0", "why": "MCU 安全启动事实标准（安全MCU抓手核心）" },
-      { "repo": "op-tee/optee_os", "priority": "P0", "why": "TrustZone TEE OS，安全岛软件栈参照" },
-      { "repo": "newaetech/chipwhisperer", "priority": "P0", "why": "侧信道/故障注入研究平台（L3→L4 攻击面）" },
-      { "repo": "zephyrproject-rtos/zephyr", "priority": "P0", "why": "嵌入式安全生态：TF-M/MCUboot 集成地" },
-      { "repo": "commaai/openpilot", "priority": "P0", "why": "具身执行层最大开源样本（L4）" },
-      { "repo": "modelcontextprotocol/servers", "priority": "P1", "why": "MCP 生态风向标（L2 供应链）" },
-      { "repo": "OWASP/www-project-top-10-for-large-language-model-applications", "priority": "P1", "why": "OWASP LLM Top 10 标准演进（L1）" },
-      { "repo": "OWASP/www-project-agentic-skills-top-10", "priority": "P1", "why": "OWASP Agentic 技能 Top 10 标准演进（L2）" },
-      { "repo": "NVIDIA/garak", "priority": "P1", "why": "LLM 红队扫描器（L1）" },
-      { "repo": "microsoft/PyRIT", "priority": "P1", "why": "微软 AI 红队工具包（L1）" },
-      { "repo": "ethz-spylab/agentdojo", "priority": "P1", "why": "Agent 攻防基准（L2）" },
-      { "repo": "uptane/uptane-standard", "priority": "P1", "why": "抗妥协 OTA 标准（L4 供应链基线）" },
-      { "repo": "Phala-Network/hopper-llm-benchmark", "priority": "P2", "why": "TEE×LLM benchmark（L2×L3）" },
-      { "repo": "tinfoilsh/cc-repro", "priority": "P2", "why": "机密计算可复现验证（L3）" },
-      { "repo": "keystone-enclave/keystone", "priority": "P2", "why": "RISC-V TEE 学术前沿（L3）" },
-      { "repo": "trustedfirmware-m/trusted-firmware-m", "priority": "P2", "why": "MCU 可信固件（安全MCU抓手）" }
+      {
+        "repo": "mcu-tools/mcuboot",
+        "priority": "P0",
+        "why": "MCU 安全启动事实标准（安全MCU抓手核心）"
+      },
+      {
+        "repo": "op-tee/optee_os",
+        "priority": "P0",
+        "why": "TrustZone TEE OS，安全岛软件栈参照"
+      },
+      {
+        "repo": "newaetech/chipwhisperer",
+        "priority": "P0",
+        "why": "侧信道/故障注入研究平台（L3→L4 攻击面）"
+      },
+      {
+        "repo": "zephyrproject-rtos/zephyr",
+        "priority": "P0",
+        "why": "嵌入式安全生态：TF-M/MCUboot 集成地"
+      },
+      {
+        "repo": "commaai/openpilot",
+        "priority": "P0",
+        "why": "具身执行层最大开源样本（L4）"
+      },
+      {
+        "repo": "modelcontextprotocol/servers",
+        "priority": "P1",
+        "why": "MCP 生态风向标（L2 供应链）"
+      },
+      {
+        "repo": "OWASP/www-project-top-10-for-large-language-model-applications",
+        "priority": "P1",
+        "why": "OWASP LLM Top 10 标准演进（L1）"
+      },
+      {
+        "repo": "OWASP/www-project-agentic-skills-top-10",
+        "priority": "P1",
+        "why": "OWASP Agentic 技能 Top 10 标准演进（L2）"
+      },
+      {
+        "repo": "NVIDIA/garak",
+        "priority": "P1",
+        "why": "LLM 红队扫描器（L1）"
+      },
+      {
+        "repo": "microsoft/PyRIT",
+        "priority": "P1",
+        "why": "微软 AI 红队工具包（L1）"
+      },
+      {
+        "repo": "ethz-spylab/agentdojo",
+        "priority": "P1",
+        "why": "Agent 攻防基准（L2）"
+      },
+      {
+        "repo": "uptane/uptane-standard",
+        "priority": "P1",
+        "why": "抗妥协 OTA 标准（L4 供应链基线）"
+      },
+      {
+        "repo": "Phala-Network/hopper-llm-benchmark",
+        "priority": "P2",
+        "why": "TEE×LLM benchmark（L2×L3）"
+      },
+      {
+        "repo": "tinfoilsh/cc-repro",
+        "priority": "P2",
+        "why": "机密计算可复现验证（L3）"
+      },
+      {
+        "repo": "keystone-enclave/keystone",
+        "priority": "P2",
+        "why": "RISC-V TEE 学术前沿（L3）"
+      },
+      {
+        "repo": "trustedfirmware-m/trusted-firmware-m",
+        "priority": "P2",
+        "why": "MCU 可信固件（安全MCU抓手）"
+      }
     ]
   },
   "github": {
@@ -81,144 +165,610 @@
       "ottosulin/awesome-ai-security",
       "huhusmang/Awesome-LLMs-for-Vulnerability-Detection",
       "systempromptio/awesome-ai-agent-governance",
-      "GauthamMK-0/Cudro"
+      "GauthamMK-0/Cudro",
+      "rzc156/Embodied-Robot-Intelligence"
     ],
     "emerging_searches": [
-      { "label": "Agent 安全新星（近14天新建）", "q": "\"agent security\" OR \"prompt injection\" OR \"MCP security\" created:>{cutoff}" },
-      { "label": "AgentOS/技能供应链新星（近14天新建）", "q": "\"agent firewall\" OR \"skill scanning\" OR \"MCP scan\" OR \"AgentOS\" OR \"agent harness\" created:>{cutoff}" },
-      { "label": "机密计算×LLM 新星（近14天新建）", "q": "\"confidential inference\" OR \"GPU TEE\" OR \"TEE agent\" OR \"confidential LLM\" OR \"enclave LLM\" created:>{cutoff}" },
-      { "label": "GPU 攻击面新星（近14天新建）", "q": "\"rowhammer\" OR \"GPU side channel\" OR \"bit-flip attack\" OR \"GPU memory leak\" created:>{cutoff}" },
-      { "label": "汽车安全新星（近14天新建）", "q": "\"automotive security\" OR \"CAN security\" OR \"car hacking\" OR \"vehicle security\" created:>{cutoff}" },
-      { "label": "VLA/机器人安全新星（近14天新建）", "q": "\"vision-language-action\" OR \"VLA security\" OR \"robot security\" OR \"embodied AI\" created:>{cutoff}" },
-      { "label": "安全MCU/安全岛新星（近14天新建）", "q": "\"secure MCU\" OR \"safety island\" OR \"automotive HSM\" OR \"MCU security\" created:>{cutoff}" },
-      { "label": "具身硬件屏障新星（近14天新建）", "q": "\"safety filter\" OR \"action guard\" OR \"actuator authentication\" OR \"hardware-enforced safety\" created:>{cutoff}" }
+      {
+        "label": "Agent 安全新星（近14天新建）",
+        "q": "\"agent security\" OR \"prompt injection\" OR \"MCP security\" created:>{cutoff}"
+      },
+      {
+        "label": "AgentOS/技能供应链新星（近14天新建）",
+        "q": "\"agent firewall\" OR \"skill scanning\" OR \"MCP scan\" OR \"AgentOS\" OR \"agent harness\" created:>{cutoff}"
+      },
+      {
+        "label": "机密计算×LLM 新星（近14天新建）",
+        "q": "\"confidential inference\" OR \"GPU TEE\" OR \"TEE agent\" OR \"confidential LLM\" OR \"enclave LLM\" created:>{cutoff}"
+      },
+      {
+        "label": "GPU 攻击面新星（近14天新建）",
+        "q": "\"rowhammer\" OR \"GPU side channel\" OR \"bit-flip attack\" OR \"GPU memory leak\" created:>{cutoff}"
+      },
+      {
+        "label": "汽车安全新星（近14天新建）",
+        "q": "\"automotive security\" OR \"CAN security\" OR \"car hacking\" OR \"vehicle security\" created:>{cutoff}"
+      },
+      {
+        "label": "VLA/机器人安全新星（近14天新建）",
+        "q": "\"vision-language-action\" OR \"VLA security\" OR \"robot security\" OR \"embodied AI\" created:>{cutoff}"
+      },
+      {
+        "label": "安全MCU/安全岛新星（近14天新建）",
+        "q": "\"secure MCU\" OR \"safety island\" OR \"automotive HSM\" OR \"MCU security\" created:>{cutoff}"
+      },
+      {
+        "label": "具身硬件屏障新星（近14天新建）",
+        "q": "\"safety filter\" OR \"action guard\" OR \"actuator authentication\" OR \"hardware-enforced safety\" created:>{cutoff}"
+      }
     ],
     "active_searches": [
-      { "label": "AgentOS/MCP 生态（近7天活跃）", "q": "\"model context protocol\" OR \"MCP security\" OR \"agent harness\" OR \"AgentOS\" OR \"agent sandbox\" pushed:>{cutoff}" },
-      { "label": "Agent 攻防（近7天活跃）", "q": "\"prompt injection\" OR \"AI red team\" OR \"agent redteam\" OR \"LLM security\" pushed:>{cutoff}" },
-      { "label": "机密 AI（近7天活跃）", "q": "\"confidential computing\" OR \"confidential inference\" OR \"GPU TEE\" pushed:>{cutoff} LLM OR inference OR agent" },
-      { "label": "TEE×Agent（近7天活跃）", "q": "\"TEE agent\" OR \"enclave agent\" OR \"agent attestation\" OR \"confidential agent\" pushed:>{cutoff}" },
-      { "label": "车载安全（近7天活跃）", "q": "\"automotive cybersecurity\" OR \"CAN injection\" OR \"ISO 21434\" OR \"safety island\" OR \"CANsec\" pushed:>{cutoff}" },
-      { "label": "具身智能安全（近7天活跃）", "q": "\"vision-language-action\" OR \"VLA attack\" OR \"robot security\" OR \"sensor spoofing\" pushed:>{cutoff}" },
-      { "label": "故障注入（近7天活跃）", "q": "\"fault injection\" OR \"voltage glitch\" OR \"laser fault\" pushed:>{cutoff} MCU OR automotive OR secure boot" },
-      { "label": "安全MCU/TEE（近7天活跃）", "q": "\"secure MCU\" OR \"MCUboot\" OR \"OP-TEE\" OR \"Trusted Firmware\" OR \"safety island\" pushed:>{cutoff}" },
-      { "label": "具身硬件屏障（近7天活跃）", "q": "\"safety filter\" OR \"VLA safety\" OR \"actuator authentication\" OR \"hardware safety barrier\" pushed:>{cutoff}" }
+      {
+        "label": "AgentOS/MCP 生态（近7天活跃）",
+        "q": "\"model context protocol\" OR \"MCP security\" OR \"agent harness\" OR \"AgentOS\" OR \"agent sandbox\" pushed:>{cutoff}"
+      },
+      {
+        "label": "Agent 攻防（近7天活跃）",
+        "q": "\"prompt injection\" OR \"AI red team\" OR \"agent redteam\" OR \"LLM security\" pushed:>{cutoff}"
+      },
+      {
+        "label": "机密 AI（近7天活跃）",
+        "q": "\"confidential computing\" OR \"confidential inference\" OR \"GPU TEE\" pushed:>{cutoff} LLM OR inference OR agent"
+      },
+      {
+        "label": "TEE×Agent（近7天活跃）",
+        "q": "\"TEE agent\" OR \"enclave agent\" OR \"agent attestation\" OR \"confidential agent\" pushed:>{cutoff}"
+      },
+      {
+        "label": "车载安全（近7天活跃）",
+        "q": "\"automotive cybersecurity\" OR \"CAN injection\" OR \"ISO 21434\" OR \"safety island\" OR \"CANsec\" pushed:>{cutoff}"
+      },
+      {
+        "label": "具身智能安全（近7天活跃）",
+        "q": "\"vision-language-action\" OR \"VLA attack\" OR \"robot security\" OR \"sensor spoofing\" pushed:>{cutoff}"
+      },
+      {
+        "label": "故障注入（近7天活跃）",
+        "q": "\"fault injection\" OR \"voltage glitch\" OR \"laser fault\" pushed:>{cutoff} MCU OR automotive OR secure boot"
+      },
+      {
+        "label": "安全MCU/TEE（近7天活跃）",
+        "q": "\"secure MCU\" OR \"MCUboot\" OR \"OP-TEE\" OR \"Trusted Firmware\" OR \"safety island\" pushed:>{cutoff}"
+      },
+      {
+        "label": "具身硬件屏障（近7天活跃）",
+        "q": "\"safety filter\" OR \"VLA safety\" OR \"actuator authentication\" OR \"hardware safety barrier\" pushed:>{cutoff}"
+      }
     ]
   },
   "arxiv": {
-    "categories": ["cs.CR", "cs.AI", "cs.CL", "cs.AR", "cs.RO", "eess.SY"],
+    "categories": [
+      "cs.CR",
+      "cs.AI",
+      "cs.CL",
+      "cs.AR",
+      "cs.RO",
+      "eess.SY"
+    ],
     "days": 14,
     "max_results": 80,
     "terms": [
-      "prompt injection", "agent security", "jailbreak", "tool poisoning",
-      "model context protocol", "guardrail", "AI red teaming", "multi-agent security",
-      "trusted execution environment", "confidential computing", "GPU TEE",
-      "enclave LLM", "confidential inference", "remote attestation",
-      "GPU side channel", "rowhammer", "bit-flip attack model",
-      "hardware root of trust", "confidential agent",
-      "model weight integrity", "secure enclave inference",
-      "vision-language-action", "robot security", "adversarial robot",
-      "sensor spoofing", "LiDAR spoofing", "CAN bus security",
-      "automotive cybersecurity", "autonomous driving security",
-      "fault injection", "secure boot bypass", "keyless entry",
-      "physical adversarial attack", "embodied AI safety",
-      "security microcontroller", "VLA safety filter", "actuator authentication",
-      "hardware security barrier", "safety filter robot", "trusted firmware"
+      "prompt injection",
+      "agent security",
+      "jailbreak",
+      "tool poisoning",
+      "model context protocol",
+      "guardrail",
+      "AI red teaming",
+      "multi-agent security",
+      "trusted execution environment",
+      "confidential computing",
+      "GPU TEE",
+      "enclave LLM",
+      "confidential inference",
+      "remote attestation",
+      "GPU side channel",
+      "rowhammer",
+      "bit-flip attack model",
+      "hardware root of trust",
+      "confidential agent",
+      "model weight integrity",
+      "secure enclave inference",
+      "vision-language-action",
+      "robot security",
+      "adversarial robot",
+      "sensor spoofing",
+      "LiDAR spoofing",
+      "CAN bus security",
+      "automotive cybersecurity",
+      "autonomous driving security",
+      "fault injection",
+      "secure boot bypass",
+      "keyless entry",
+      "physical adversarial attack",
+      "embodied AI safety",
+      "security microcontroller",
+      "VLA safety filter",
+      "actuator authentication",
+      "hardware security barrier",
+      "safety filter robot",
+      "trusted firmware"
     ]
   },
   "rss": [
-    { "name": "The Hacker News", "url": "https://feeds.feedburner.com/TheHackersNews" },
-    { "name": "BleepingComputer", "url": "https://www.bleepingcomputer.com/feed/" },
-    { "name": "Dark Reading", "url": "https://www.darkreading.com/rss.xml" },
-    { "name": "SecurityWeek", "url": "https://feeds.feedburner.com/securityweek" },
-    { "name": "Schneier on Security", "url": "https://www.schneier.com/feed/" },
-    { "name": "GoogleNews-AI Agent安全", "url": "https://news.google.com/rss/search?q=AI+agent+security+OR+prompt+injection+OR+MCP+security+OR+AgentOS&hl=en-US&gl=US&ceid=US:en" },
-    { "name": "GoogleNews-硬件AI安全", "url": "https://news.google.com/rss/search?q=confidential+computing+AI+OR+TEE+LLM+OR+GPU+security+OR+enclave+agents&hl=en-US&gl=US&ceid=US:en" },
-    { "name": "GoogleNews-硬件漏洞", "url": "https://news.google.com/rss/search?q=GPU+vulnerability+OR+side+channel+OR+Rowhammer+OR+confidential+computing&hl=en-US&gl=US&ceid=US:en" },
-    { "name": "GoogleNews-汽车网络安全", "url": "https://news.google.com/rss/search?q=automotive+cybersecurity+OR+car+hacking+OR+CAN+injection+OR+vehicle+vulnerability&hl=en-US&gl=US&ceid=US:en" },
-    { "name": "GoogleNews-具身智能机器人", "url": "https://news.google.com/rss/search?q=robot+security+OR+humanoid+robot+OR+embodied+AI+OR+vision-language-action&hl=en-US&gl=US&ceid=US:en" },
-    { "name": "GoogleNews-安全MCU安全岛", "url": "https://news.google.com/rss/search?q=secure+MCU+OR+safety+island+OR+automotive+HSM+OR+MCUboot&hl=en-US&gl=US&ceid=US:en" },
-    { "name": "GoogleNews-功能安全与机器人", "url": "https://news.google.com/rss/search?q=robot+functional+safety+OR+ISO+26262+OR+PROFIsafe+OR+safety+island&hl=en-US&gl=US&ceid=US:en" },
-    { "name": "Project Zero", "url": "https://googleprojectzero.blogspot.com/feeds/posts/default" },
-    { "name": "Trail of Bits", "url": "https://blog.trailofbits.com/feed/" },
-    { "name": "GitHub Security Lab", "url": "https://github.blog/tag/github-security-lab/feed/" },
-    { "name": "Google Security Blog", "url": "https://security.googleblog.com/feeds/posts/default" },
-    { "name": "Rapid7", "url": "https://www.rapid7.com/blog/rss/" },
-    { "name": "USENIX", "url": "https://www.usenix.org/rss.xml" },
-    { "name": "QuarksLab", "url": "https://blog.quarkslab.com/feeds/all.atom.xml" },
-    { "name": "OpenAI News", "url": "https://openai.com/news/rss.xml" }
+    {
+      "name": "The Hacker News",
+      "url": "https://feeds.feedburner.com/TheHackersNews"
+    },
+    {
+      "name": "BleepingComputer",
+      "url": "https://www.bleepingcomputer.com/feed/"
+    },
+    {
+      "name": "Dark Reading",
+      "url": "https://www.darkreading.com/rss.xml"
+    },
+    {
+      "name": "SecurityWeek",
+      "url": "https://feeds.feedburner.com/securityweek"
+    },
+    {
+      "name": "Schneier on Security",
+      "url": "https://www.schneier.com/feed/"
+    },
+    {
+      "name": "GoogleNews-AI Agent安全",
+      "url": "https://news.google.com/rss/search?q=AI+agent+security+OR+prompt+injection+OR+MCP+security+OR+AgentOS&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "name": "GoogleNews-硬件AI安全",
+      "url": "https://news.google.com/rss/search?q=confidential+computing+AI+OR+TEE+LLM+OR+GPU+security+OR+enclave+agents&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "name": "GoogleNews-硬件漏洞",
+      "url": "https://news.google.com/rss/search?q=GPU+vulnerability+OR+side+channel+OR+Rowhammer+OR+confidential+computing&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "name": "GoogleNews-汽车网络安全",
+      "url": "https://news.google.com/rss/search?q=automotive+cybersecurity+OR+car+hacking+OR+CAN+injection+OR+vehicle+vulnerability&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "name": "GoogleNews-具身智能机器人",
+      "url": "https://news.google.com/rss/search?q=robot+security+OR+humanoid+robot+OR+embodied+AI+OR+vision-language-action&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "name": "GoogleNews-安全MCU安全岛",
+      "url": "https://news.google.com/rss/search?q=secure+MCU+OR+safety+island+OR+automotive+HSM+OR+MCUboot&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "name": "GoogleNews-功能安全与机器人",
+      "url": "https://news.google.com/rss/search?q=robot+functional+safety+OR+ISO+26262+OR+PROFIsafe+OR+safety+island&hl=en-US&gl=US&ceid=US:en"
+    },
+    {
+      "name": "Project Zero",
+      "url": "https://googleprojectzero.blogspot.com/feeds/posts/default"
+    },
+    {
+      "name": "Trail of Bits",
+      "url": "https://blog.trailofbits.com/feed/"
+    },
+    {
+      "name": "GitHub Security Lab",
+      "url": "https://github.blog/tag/github-security-lab/feed/"
+    },
+    {
+      "name": "Google Security Blog",
+      "url": "https://security.googleblog.com/feeds/posts/default"
+    },
+    {
+      "name": "Rapid7",
+      "url": "https://www.rapid7.com/blog/rss/"
+    },
+    {
+      "name": "USENIX",
+      "url": "https://www.usenix.org/rss.xml"
+    },
+    {
+      "name": "QuarksLab",
+      "url": "https://blog.quarkslab.com/feeds/all.atom.xml"
+    },
+    {
+      "name": "OpenAI News",
+      "url": "https://openai.com/news/rss.xml"
+    }
   ],
   "rss_days": 3,
   "conferences": [
-    { "name": "统一情报图谱（总纲）", "url": "../docs/unified-map.md", "note": "四层模型×四把尺子×数据源对照——每日报告的阅读框架" },
-    { "name": "OWASP Agentic Top 10 (2026)", "url": "https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/", "note": "L2 主分类轴：ASI01-ASI10" },
-    { "name": "OWASP GenAI LLM Top 10 (2026)", "url": "https://genai.owasp.org/resource/owasp-genai-llm-top-10-2026/", "note": "L1 模型层风险框架" },
-    { "name": "MITRE ATLAS", "url": "https://atlas.mitre.org/", "note": "AI 系统攻击战术技术库（全层）" },
-    { "name": "A Survey of Confidential Computing for Agentic AI", "url": "https://arxiv.org/html/2605.03213v1", "note": "L2×L3 交叉首篇综述（2026-05）" },
-    { "name": "VLA Safety 综述（具身智能安全）", "url": "https://arxiv.org/html/2604.23775v1", "note": "L4 VLA 安全首篇综述" },
-    { "name": "NVIDIA 机密计算（Hopper/Blackwell TEE-I/O）", "url": "https://www.nvidia.com/en-us/data-center/solutions/confidential-computing/", "note": "L3 GPU TEE 工业标准" },
-    { "name": "Apple Private Cloud Compute 安全指南", "url": "https://security.apple.com/documentation/private-cloud-compute", "note": "L3 硬件信任根标杆" },
-    { "name": "escar Europe 2026（车载安全会议）", "url": "https://escar.info/escar-europe", "note": "L4 最专业会议，2026-11 波恩" },
-    { "name": "Trusted Firmware 项目（TF-A/TF-M/OP-TEE）", "url": "https://www.trustedfirmware.org/", "note": "安全MCU抓手：开源可信固件基线" },
-    { "name": "MCUboot 文档", "url": "https://docs.mcuboot.com/", "note": "MCU 安全启动事实标准" },
-    { "name": "IEEE S&P（安全四大顶会）", "url": "https://sp2027.ieee-security.org/", "note": "Big 4 学术顶会：AI 安全/TEE/故障注入主阵地" },
-    { "name": "ACM CCS（安全四大顶会）", "url": "https://www.sigsac.org/ccs.html", "note": "接收信号经 arXiv comment 通道跟踪" },
-    { "name": "USENIX Security（安全四大顶会）", "url": "https://www.usenix.org/conference/usenixsecurity27", "note": "Agent 安全/机密计算论文高产地" },
-    { "name": "NDSS（安全四大顶会）", "url": "https://www.ndss-symposium.org/", "note": "2027 接收列表已纳入顶会雷达" },
-    { "name": "Anthropic：Building Effective Agents", "url": "https://www.anthropic.com/research/building-effective-agents", "note": "Agent 工程一手指南（用户指定参考）" },
-    { "name": "Anthropic 安全页", "url": "https://www.anthropic.com/security", "note": "Claude agent 安全白皮书/安全实践一手来源" },
-    { "name": "Black Hat 议题档案", "url": "https://www.blackhat.com/us-26/briefings.html", "note": "黑帽大会议题一手资料（RSS 被 Cloudflare 拦，走静态+GoogleNews）" },
-    { "name": "Microsoft Security Blog", "url": "https://www.microsoft.com/en-us/security/blog/", "note": "AI 红队/Agent 安全官方文章（feed 超时未接入，PyRIT 团队产出地）" },
-    { "name": "CISA 网络安全通告", "url": "https://www.cisa.gov/cybersecurity-advisories", "note": "含 ICS/机器人/汽车控制器物理层通告（feed 被 Akamai 拦，走目录）" },
-    { "name": "KU Leuven COSIC", "url": "https://www.esat.kuleuven.be/cosic/", "note": "硬件安全学术重镇：侧信道/故障注入/MCU 安全" },
-    { "name": "x86 TEE 硬件白皮书（Intel TDX / AMD SEV-SNP）", "url": "https://www.amd.com/en/products/accelerators/epyc/security-and-virtualization.html", "note": "L3 TEE 硬件一手规格（Intel/AMD 官方文档入口）" },
-    { "name": "Three Glitches to Rule One Car（ASIA CCS 2025）", "url": "https://dl.acm.org/doi/10.1145/3708821.3710820", "note": "L3→L4 完整攻击链样本" },
-    { "name": "Uptane 标准（抗妥协 OTA）", "url": "https://github.com/uptane/uptane-standard", "note": "L4 供应链证明基线" },
-    { "name": "CCC：Agent 生产化安全架构", "url": "https://confidentialcomputing.io/2026/05/20/your-ai-agents-are-already-in-production-your-security-architecture-isnt-ready/", "note": "L3 产业联盟对 L2 的回应" },
-    { "name": "Black Hat AI Summit 2026 回顾（Zenity）", "url": "https://zenity.io/blog/ai-agent-security-black-hat-recap", "note": "Agent 供应链/技能/MCP 议题风向" },
-    { "name": "DEF CON AI Village / Car Hacking Village", "url": "https://aivillage.org/", "note": "L2 与 L4 的社区会议风向标" },
-    { "name": "调研基线文档", "url": "../docs/embodied-auto-security.md", "note": "第三轨调研与六个下注思路；另见 docs/hardware-security.md、docs/landscape.md" }
+    {
+      "name": "统一情报图谱（总纲）",
+      "url": "../docs/unified-map.md",
+      "note": "四层模型×四把尺子×数据源对照——每日报告的阅读框架"
+    },
+    {
+      "name": "OWASP Agentic Top 10 (2026)",
+      "url": "https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/",
+      "note": "L2 主分类轴：ASI01-ASI10"
+    },
+    {
+      "name": "OWASP GenAI LLM Top 10 (2026)",
+      "url": "https://genai.owasp.org/resource/owasp-genai-llm-top-10-2026/",
+      "note": "L1 模型层风险框架"
+    },
+    {
+      "name": "MITRE ATLAS",
+      "url": "https://atlas.mitre.org/",
+      "note": "AI 系统攻击战术技术库（全层）"
+    },
+    {
+      "name": "A Survey of Confidential Computing for Agentic AI",
+      "url": "https://arxiv.org/html/2605.03213v1",
+      "note": "L2×L3 交叉首篇综述（2026-05）"
+    },
+    {
+      "name": "VLA Safety 综述（具身智能安全）",
+      "url": "https://arxiv.org/html/2604.23775v1",
+      "note": "L4 VLA 安全首篇综述"
+    },
+    {
+      "name": "NVIDIA 机密计算（Hopper/Blackwell TEE-I/O）",
+      "url": "https://www.nvidia.com/en-us/data-center/solutions/confidential-computing/",
+      "note": "L3 GPU TEE 工业标准"
+    },
+    {
+      "name": "Apple Private Cloud Compute 安全指南",
+      "url": "https://security.apple.com/documentation/private-cloud-compute",
+      "note": "L3 硬件信任根标杆"
+    },
+    {
+      "name": "escar Europe 2026（车载安全会议）",
+      "url": "https://escar.info/escar-europe",
+      "note": "L4 最专业会议，2026-11 波恩"
+    },
+    {
+      "name": "Trusted Firmware 项目（TF-A/TF-M/OP-TEE）",
+      "url": "https://www.trustedfirmware.org/",
+      "note": "安全MCU抓手：开源可信固件基线"
+    },
+    {
+      "name": "MCUboot 文档",
+      "url": "https://docs.mcuboot.com/",
+      "note": "MCU 安全启动事实标准"
+    },
+    {
+      "name": "IEEE S&P（安全四大顶会）",
+      "url": "https://sp2027.ieee-security.org/",
+      "note": "Big 4 学术顶会：AI 安全/TEE/故障注入主阵地"
+    },
+    {
+      "name": "ACM CCS（安全四大顶会）",
+      "url": "https://www.sigsac.org/ccs.html",
+      "note": "接收信号经 arXiv comment 通道跟踪"
+    },
+    {
+      "name": "USENIX Security（安全四大顶会）",
+      "url": "https://www.usenix.org/conference/usenixsecurity27",
+      "note": "Agent 安全/机密计算论文高产地"
+    },
+    {
+      "name": "NDSS（安全四大顶会）",
+      "url": "https://www.ndss-symposium.org/",
+      "note": "2027 接收列表已纳入顶会雷达"
+    },
+    {
+      "name": "Anthropic：Building Effective Agents",
+      "url": "https://www.anthropic.com/research/building-effective-agents",
+      "note": "Agent 工程一手指南（用户指定参考）"
+    },
+    {
+      "name": "Anthropic 安全页",
+      "url": "https://www.anthropic.com/security",
+      "note": "Claude agent 安全白皮书/安全实践一手来源"
+    },
+    {
+      "name": "Black Hat 议题档案",
+      "url": "https://www.blackhat.com/us-26/briefings.html",
+      "note": "黑帽大会议题一手资料（RSS 被 Cloudflare 拦，走静态+GoogleNews）"
+    },
+    {
+      "name": "Microsoft Security Blog",
+      "url": "https://www.microsoft.com/en-us/security/blog/",
+      "note": "AI 红队/Agent 安全官方文章（feed 超时未接入，PyRIT 团队产出地）"
+    },
+    {
+      "name": "CISA 网络安全通告",
+      "url": "https://www.cisa.gov/cybersecurity-advisories",
+      "note": "含 ICS/机器人/汽车控制器物理层通告（feed 被 Akamai 拦，走目录）"
+    },
+    {
+      "name": "KU Leuven COSIC",
+      "url": "https://www.esat.kuleuven.be/cosic/",
+      "note": "硬件安全学术重镇：侧信道/故障注入/MCU 安全"
+    },
+    {
+      "name": "x86 TEE 硬件白皮书（Intel TDX / AMD SEV-SNP）",
+      "url": "https://www.amd.com/en/products/accelerators/epyc/security-and-virtualization.html",
+      "note": "L3 TEE 硬件一手规格（Intel/AMD 官方文档入口）"
+    },
+    {
+      "name": "Three Glitches to Rule One Car（ASIA CCS 2025）",
+      "url": "https://dl.acm.org/doi/10.1145/3708821.3710820",
+      "note": "L3→L4 完整攻击链样本"
+    },
+    {
+      "name": "Uptane 标准（抗妥协 OTA）",
+      "url": "https://github.com/uptane/uptane-standard",
+      "note": "L4 供应链证明基线"
+    },
+    {
+      "name": "CCC：Agent 生产化安全架构",
+      "url": "https://confidentialcomputing.io/2026/05/20/your-ai-agents-are-already-in-production-your-security-architecture-isnt-ready/",
+      "note": "L3 产业联盟对 L2 的回应"
+    },
+    {
+      "name": "Black Hat AI Summit 2026 回顾（Zenity）",
+      "url": "https://zenity.io/blog/ai-agent-security-black-hat-recap",
+      "note": "Agent 供应链/技能/MCP 议题风向"
+    },
+    {
+      "name": "DEF CON AI Village / Car Hacking Village",
+      "url": "https://aivillage.org/",
+      "note": "L2 与 L4 的社区会议风向标"
+    },
+    {
+      "name": "调研基线文档",
+      "url": "../docs/embodied-auto-security.md",
+      "note": "第三轨调研与六个下注思路；另见 docs/hardware-security.md、docs/landscape.md"
+    }
   ],
   "keywords": {
-    "AgentOS": 8, "agent harness": 6, "MCP": 6, "model context protocol": 6,
-    "tool poisoning": 7, "goal hijack": 7, "prompt injection": 6, "提示注入": 6,
-    "jailbreak": 6, "越狱": 6, "guardrail": 5, "memory poisoning": 7, "A2A": 5,
-    "agentic": 5, "agent": 4, "agent security": 6, "智能体": 6,
-    "TEE": 8, "trusted execution environment": 8, "enclave": 8, "confidential computing": 8,
-    "机密计算": 8, "飞地": 8, "可信执行": 8,
-    "attestation": 7, "remote attestation": 7, "证明": 6,
-    "GPU": 6, "side channel": 7, "侧信道": 7, "rowhammer": 8, "bit-flip": 7, "位翻转": 7,
-    "hardware root of trust": 7, "SGX": 7, "TDX": 7, "SEV-SNP": 7, "H100": 6, "Blackwell": 6,
-    "model weights": 5, "权重": 4, "integrity": 5, "完整性": 5, "secret": 4, "key": 3,
-    "NPU": 5, "secure element": 5, "CHERI": 6, "memory tagging": 6, "MTE": 5,
-    "vision-language-action": 8, "VLA": 7, "robot": 4, "机器人": 6, "具身": 7, "embodied": 7,
-    "CAN bus": 7, "CAN injection": 8, "ECU": 6, "automotive": 6, "汽车": 7, "vehicle": 5,
-    "AURIX": 8, "lockstep": 7, "ASIL": 8, "ISO 21434": 8, "R155": 7, "EVITA": 8,
-    "HSM": 7, "safety island": 8, "安全岛": 8, "fault injection": 8, "故障注入": 8,
-    "glitch": 6, "immobilizer": 7, "keyless": 7, "spoofing": 6, "sensor spoofing": 7,
-    "LiDAR": 6, "Uptane": 8, "OTA": 4, "V2X": 6, "AUTOSAR": 7, "ADAS": 6,
-    "autonomous driving": 5, "openpilot": 5, "物理": 5,
-    "LLM": 4, "inference": 4, "memory": 4, "sandbox": 3,
-    "vulnerab": 2, "exploit": 2, "CVE": 3, "attack": 2, "leak": 4, "zero-day": 3,
-    "Claude": 2, "ChatGPT": 2, "OpenAI": 2, "DeepSeek": 2, "Copilot": 3,
-    "supply chain": 3, "identity": 2, "red team": 4, "benchmark": 2,
-    "safety filter": 8, "action guard": 8, "actuator authentication": 8,
-    "command authentication": 7, "hardware-enforced": 8, "hardware security barrier": 9,
-    "PROFIsafe": 8, "FSoE": 7, "Safety over EtherCAT": 7, "functional safety": 7,
-    "ISO 26262": 8, "security MCU": 8, "secure MCU": 8, "MCUboot": 8, "secure boot": 7,
-    "TF-M": 7, "Trusted Firmware": 6, "TrustZone": 6, "OP-TEE": 7, "optee": 5,
-    "PSA Certified": 7, "SESIP": 7, "CC EAL": 6, "RH850": 7, "S32K": 7,
-    "ChipWhisperer": 7, "Zephyr": 5, "VLA safety": 8, "keystone enclave": 6,
-    "USENIX Security": 7, "IEEE S&P": 7, "Oakland": 6, "ACM CCS": 7, "NDSS": 7
+    "AgentOS": 8,
+    "agent harness": 6,
+    "MCP": 6,
+    "model context protocol": 6,
+    "tool poisoning": 7,
+    "goal hijack": 7,
+    "prompt injection": 6,
+    "提示注入": 6,
+    "jailbreak": 6,
+    "越狱": 6,
+    "guardrail": 5,
+    "memory poisoning": 7,
+    "A2A": 5,
+    "agentic": 5,
+    "agent": 4,
+    "agent security": 6,
+    "智能体": 6,
+    "TEE": 8,
+    "trusted execution environment": 8,
+    "enclave": 8,
+    "confidential computing": 8,
+    "机密计算": 8,
+    "飞地": 8,
+    "可信执行": 8,
+    "attestation": 7,
+    "remote attestation": 7,
+    "证明": 6,
+    "GPU": 6,
+    "side channel": 7,
+    "侧信道": 7,
+    "rowhammer": 8,
+    "bit-flip": 7,
+    "位翻转": 7,
+    "hardware root of trust": 7,
+    "SGX": 7,
+    "TDX": 7,
+    "SEV-SNP": 7,
+    "H100": 6,
+    "Blackwell": 6,
+    "model weights": 5,
+    "权重": 4,
+    "integrity": 5,
+    "完整性": 5,
+    "secret": 4,
+    "key": 3,
+    "NPU": 5,
+    "secure element": 5,
+    "CHERI": 6,
+    "memory tagging": 6,
+    "MTE": 5,
+    "vision-language-action": 8,
+    "VLA": 7,
+    "robot": 4,
+    "机器人": 6,
+    "具身": 7,
+    "embodied": 7,
+    "CAN bus": 7,
+    "CAN injection": 8,
+    "ECU": 6,
+    "automotive": 6,
+    "汽车": 7,
+    "vehicle": 5,
+    "AURIX": 8,
+    "lockstep": 7,
+    "ASIL": 8,
+    "ISO 21434": 8,
+    "R155": 7,
+    "EVITA": 8,
+    "HSM": 7,
+    "safety island": 8,
+    "安全岛": 8,
+    "fault injection": 8,
+    "故障注入": 8,
+    "glitch": 6,
+    "immobilizer": 7,
+    "keyless": 7,
+    "spoofing": 6,
+    "sensor spoofing": 7,
+    "LiDAR": 6,
+    "Uptane": 8,
+    "OTA": 4,
+    "V2X": 6,
+    "AUTOSAR": 7,
+    "ADAS": 6,
+    "autonomous driving": 5,
+    "openpilot": 5,
+    "物理": 5,
+    "LLM": 4,
+    "inference": 4,
+    "memory": 4,
+    "sandbox": 3,
+    "vulnerab": 2,
+    "exploit": 2,
+    "CVE": 3,
+    "attack": 2,
+    "leak": 4,
+    "zero-day": 3,
+    "Claude": 2,
+    "ChatGPT": 2,
+    "OpenAI": 2,
+    "DeepSeek": 2,
+    "Copilot": 3,
+    "supply chain": 3,
+    "identity": 2,
+    "red team": 4,
+    "benchmark": 2,
+    "safety filter": 8,
+    "action guard": 8,
+    "actuator authentication": 8,
+    "command authentication": 7,
+    "hardware-enforced": 8,
+    "hardware security barrier": 9,
+    "PROFIsafe": 8,
+    "FSoE": 7,
+    "Safety over EtherCAT": 7,
+    "functional safety": 7,
+    "ISO 26262": 8,
+    "security MCU": 8,
+    "secure MCU": 8,
+    "MCUboot": 8,
+    "secure boot": 7,
+    "TF-M": 7,
+    "Trusted Firmware": 6,
+    "TrustZone": 6,
+    "OP-TEE": 7,
+    "optee": 5,
+    "PSA Certified": 7,
+    "SESIP": 7,
+    "CC EAL": 6,
+    "RH850": 7,
+    "S32K": 7,
+    "ChipWhisperer": 7,
+    "Zephyr": 5,
+    "VLA safety": 8,
+    "keystone enclave": 6,
+    "USENIX Security": 7,
+    "IEEE S&P": 7,
+    "Oakland": 6,
+    "ACM CCS": 7,
+    "NDSS": 7
   },
   "tag_rules": {
-    "AgentOS": ["mcp", "agentos", "harness", "skill", "sandbox", "guardrail", "a2a", "tool call", "agent framework"],
-    "Agent安全": ["agent", "prompt injection", "llm", "guardrail", "提示注入", "智能体", "jailbreak", "red team"],
-    "机密计算": ["tee", "enclave", "confidential", "sgx", "tdx", "sev", "attestation", "pcc", "机密", "飞地"],
-    "侧信道攻击": ["side channel", "rowhammer", "timing", "power analysis", "侧信道", "leak", "bit-flip", "bit flip", "glitch", "fault injection", "故障注入"],
-    "汽车/具身": ["automotive", "vehicle", "can bus", "ecu", "adas", "autonomous", "robot", "vla", "embodied", "汽车", "机器人", "具身", "lidar", "aurix", "asil", "uptane", "keyless", "safety island"],
-    "硬件抓手": ["safety filter", "mcuboot", "optee", "trustzone", "secure mcu", "security mcu", "hsm", "profsafe", "fsoe", "tf-m", "chipwhisperer", "iso 26262", "functional safety", "actuator", "secure boot", "psa certified", "sesip", "安全岛"],
-    "完整性": ["integrity", "tamper", "attestation", "weights", "度量", "完整性", "secure boot"],
-    "产业": ["nvidia", "apple", "infineon", "nxp", "arm", "azure", "launch", "release", "product", "benchmark"]
+    "AgentOS": [
+      "mcp",
+      "agentos",
+      "harness",
+      "skill",
+      "sandbox",
+      "guardrail",
+      "a2a",
+      "tool call",
+      "agent framework"
+    ],
+    "Agent安全": [
+      "agent",
+      "prompt injection",
+      "llm",
+      "guardrail",
+      "提示注入",
+      "智能体",
+      "jailbreak",
+      "red team"
+    ],
+    "机密计算": [
+      "tee",
+      "enclave",
+      "confidential",
+      "sgx",
+      "tdx",
+      "sev",
+      "attestation",
+      "pcc",
+      "机密",
+      "飞地"
+    ],
+    "侧信道攻击": [
+      "side channel",
+      "rowhammer",
+      "timing",
+      "power analysis",
+      "侧信道",
+      "leak",
+      "bit-flip",
+      "bit flip",
+      "glitch",
+      "fault injection",
+      "故障注入"
+    ],
+    "汽车/具身": [
+      "automotive",
+      "vehicle",
+      "can bus",
+      "ecu",
+      "adas",
+      "autonomous",
+      "robot",
+      "vla",
+      "embodied",
+      "汽车",
+      "机器人",
+      "具身",
+      "lidar",
+      "aurix",
+      "asil",
+      "uptane",
+      "keyless",
+      "safety island"
+    ],
+    "硬件抓手": [
+      "safety filter",
+      "mcuboot",
+      "optee",
+      "trustzone",
+      "secure mcu",
+      "security mcu",
+      "hsm",
+      "profsafe",
+      "fsoe",
+      "tf-m",
+      "chipwhisperer",
+      "iso 26262",
+      "functional safety",
+      "actuator",
+      "secure boot",
+      "psa certified",
+      "sesip",
+      "安全岛"
+    ],
+    "完整性": [
+      "integrity",
+      "tamper",
+      "attestation",
+      "weights",
+      "度量",
+      "完整性",
+      "secure boot"
+    ],
+    "产业": [
+      "nvidia",
+      "apple",
+      "infineon",
+      "nxp",
+      "arm",
+      "azure",
+      "launch",
+      "release",
+      "product",
+      "benchmark"
+    ]
   }
 }
