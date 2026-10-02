@@ -1,50 +1,38 @@
 {
- "kind": "gh_new",
- "title": "rzc156/Embodied-Robot-Intelligence",
- "url": "https://github.com/rzc156/Embodied-Robot-Intelligence",
- "stars": 4,
+ "kind": "gh_active",
+ "title": "Agent-Threat-Rule/agent-threat-rules",
+ "url": "https://github.com/Agent-Threat-Rule/agent-threat-rules",
+ "stars": 406,
  "star_delta": 0,
- "pushed_at": "2026-09-17",
- "created_at": "2026-09-17",
- "desc": "A research-grade textbook and engineering handbook on embodied robot intelligence, covering robotics foundations, manipulation, locomotion, loco-manipulation, VLA, world models, humanoid control, agentic robotics, and ge",
- "lang": "-",
- "score": 40,
+ "pushed_at": "2026-10-01",
+ "created_at": "2026-03-09",
+ "desc": "Open detection-rule standard for AI agent security threats — like Sigma, but for AI agents. Executable, testable rules for prompt injection, tool poisoning, context exfiltration and MCP attacks. Merged into open-source p",
+ "lang": "TypeScript",
+ "score": 37,
  "hits": [
-  "agentic",
+  "MCP",
+  "tool poisoning",
+  "prompt injection",
   "agent",
-  "VLA",
-  "robot",
-  "机器人",
-  "具身"
+  "agent security",
+  "ECU"
  ],
  "tags": [
+  "AgentOS",
   "Agent安全",
   "汽车/具身"
  ],
- "date": "2026-09-17",
+ "date": "2026-10-01",
  "detail": {
-  "fetched": "# Embodied-Robot-Intelligence\nA research-grade textbook and engineering handbook on embodied robot intelligence, covering robotics foundations, manipulation, locomotion, loco-manipulation, VLA, world models, humanoid control, agentic robotics, and generalist embodied AI. 中文描述： 面向具身机器人智能的研究级教材与工程手册，系统覆盖机器人数学基础、操作、运动控制、loco-manipulation、VLA、世界模型、人形机器人、Agentic Robotics 与通用具身智能。\n",
-  "source_type": "gh_new"
+  "fetched": "<div align=\"center\">\n\n<img alt=\"ATR — Agent Threat Rules\" src=\"assets/logo-light.png\" width=\"480\" />\n\n# ATR — Agent Threat Rules\n\n**Open detection rule format for AI agent security threats.**\n\nAI Agent 威脅偵測規則的開放格式\n\n[![npm](https://img.shields.io/npm/v/agent-threat-rules?style=flat-square&color=brightgreen&label=npm)](https://www.npmjs.com/package/agent-threat-rules)\n[![PyPI](https://img.shields.io/pypi/v/pyatr?style=flat-square&color=brightgreen&label=PyPI)](https://pypi.org/project/pyatr/)\n[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-ATR%20Scan-2ea44f?style=flat-square&logo=github)](https://github.com/marketplace/actions/atr-scan)\n[![License: MIT](https://img.shields.io/badge/license-MIT-brightgreen?style=flat-square)](LICENSE)\n[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.19178002-blue?style=flat-square)](https://doi.org/10.5281/zenodo.19178002)\n[![Rules](https://img.shields.io/badge/rules-825-blue?style=flat-square)](#5-specification)\n[![Categories](https://img.shields.io/badge/categories-10-blue?style=flat-square)](#7-coverage)\n[![OWASP Agentic](https://img.shields.io/badge/OWASP_Agentic_Top_10-10%2F10-brightgreen?style=flat-square)](#7-coverage)\n[![SAFE-MCP](https://img.shields.io/badge/SAFE--MCP-91.8%25-brightgreen?style=flat-square)](#7-coverage)\n[![Sponsor](https://img.shields.io/badge/sponsor-Open%20Collective-7FADF2?style=flat-square&logo=opencollective&logoColor=white)](https://opencollective.com/agent-threat-rules)\n\n</div>\n\n---\n\n## Abstract\n\nATR (Agent Threat Rules) is an open detection rule format for AI agent security threats. Rules are written as YAML documents conforming to a versioned schema, identified by the public `ATR-YYYY-NNNNN` scheme, and evaluated by any conforming engine. The reference TypeScript engine and a Python wrapper ship in this repository under the MIT license. ATR is to AI-agent threat detection what [Sigma](https://github.com/SigmaHQ/sigma) is to SIEM detection and [YARA](https://github.com/VirusTotal/yara) is to malware signatures — a vendor-neutral, machine-readable, peer-reviewable rule format.\n\n## Status of This Document\n\nATR is published as a **Working Draft** at version `3.0.0-alpha.1`. The rule format defined in `SPEC.md` is stable and merged into open-source repos at Microsoft, Cisco, and Gen Digital, and integrated by standards-body projects (MISP / CIRCL, OWASP Agent Security Regression Harness, SigmaHQ, FINOS Common Cloud Controls); full list with PR links in [§6 Adoption](#6-adoption). Governance is currently single-maintainer (BDFL) transitioning to a Technical Steering Committee per [GOVERNANCE.md](GOVERNANCE.md).\n\nAll numbers in this document are sourced from [`data/stats.json`](data/stats.json), which is the canonical record of the project's current state. Where this README and `stats.json` disagree, `stats.json` is authoritative.\n\nThis document is bilingual where the section title benefits from it. Section bodies are English-only to keep the normative content unambiguous.\n\n## Standardization Status (added 2026-05-25)\n\nATR is publishing proposal-stage standardization scaffolding ahead of OASIS Open Project submission. New directories on the repo file tree:\n\n- [`governance/`](governance/) — proposed 9-seat TSC charter (v2.0) and standard threat model\n- [`spec/atr-event-v1.0.md`](spec/atr-event-v1.0.md), [`atr-profile-v1.0.md`](spec/atr-profile-v1.0.md), [`atr-correlation-v1.0.md`](spec/atr-correlation-v1.0.md), [`atr-language-detection-v1.0.md`](spec/atr-language-detection-v1.0.md) — proposed v1.0 spec layer with JSON schemas\n- [`spec/conformance/`](spec/conformance/) — proposed conformance corpus structure (L1/L2/L3)\n- [`legal/`](legal/) — proposed DCO, trademark policy, jurisdiction notes\n- [`certification/`](certification/) — proposed ATR-Certified™ program guide\n- [`engines/`](engines/) — Python and Go reference impl interface contracts (TypeScript is the existing engine at `src/`)\n\n**All scaffolding is tagged PROPOSED v1.0 / v2.0 and is NOT ratified.** The 9-seat TSC has not been formed. The trust marks are not registered. Existing v1.1 governance ([`GOVERNANCE.md`](GOVERNANCE.md)) continues to operate. The rule format, npm package, TypeScript engine API, and the full rule corpus are unchanged — existing ecosystem integrations (Microsoft AGT, Cisco AI Defense, MISP CIRCL, OWASP A-S-R-H, precize, Sage) work without modification.\n\nSee [`STANDARDIZATION-STATUS.md`](STANDARDIZATION-STATUS.md) for the full status matrix mapping every new artifact to `{STABLE IN PRODUCTION, PROPOSED, SKELETON, PRELIMINARY}` and timeline for OASIS submission, community comment, and ratification.\n\n## ATD — Agentic Threat Detection\n\nATD is ATR's technique catalog: an enumeration of agent-runtime attack *techniques* — the \"what\" — each mapped to MITRE ATLAS, OWASP ASI, and CWE. ATR *rules* are the \"how\" that detect them. ATD is to ATR what MITRE ATLAS is to a detection ruleset: a knowledge layer that names every known agent-runtime threat, whether or not an executable rule exists for it yet.\n\n- **Live catalog (machine-readable):** <https://agentthreatrule.org/atd>\n- **80 techniques across 9 tactics**, every one mapped to an upstream framework (or with a documented gap); a subset carry a live ATR detection rule, the rest are documented — a technique needs verifiable provenance, not a rule.\n- **Schema gate:** every PR runs `scripts/validate-atd.ts` (validates each technique against the normative `website/public/atd/atd-technique.schema.json`) and `scripts/atd/verify-atd-mappings.ts` (verifies every cited MITRE ATLAS id against the authoritative catalog).\n\n## Table of Contents\n\n- [1. Background](#1-background)\n- [2. Conformance Levels](#2-conformance-levels)\n- [3. Installation](#3-installation)\n- [4. Usage](#4-usage)\n- [5. Specification](#5-specification)\n- [6. Adoption](#6-adoption)\n- [7. Coverage](#7-coverage)\n- [8. Evaluation](#8-evaluation)\n- [9. Governance](#9-governance)\n- [10. Security](#10-security)\n- [11. Telemetry](#11-t",
+  "source_type": "gh_active"
  },
  "runner_ups": [
   {
    "kind": "gh_active",
-   "title": "Agent-Threat-Rule/agent-threat-rules",
-   "url": "https://github.com/Agent-Threat-Rule/agent-threat-rules",
-   "date": "2026-09-29",
-   "score": 37,
-   "tags": [
-    "AgentOS",
-    "Agent安全",
-    "汽车/具身"
-   ],
-   "desc": "Open detection-rule standard for AI agent security threats — like Sigma, but for AI agents. Executable, testable rules for prompt injection, tool poisoning, context exfiltration and MCP attacks. Merged into open-source p"
-  },
-  {
-   "kind": "gh_active",
    "title": "PrismorSec/prismor",
    "url": "https://github.com/PrismorSec/prismor",
-   "date": "2026-09-29",
+   "date": "2026-10-01",
    "score": 29,
    "tags": [
     "AgentOS",
@@ -58,7 +46,7 @@
    "kind": "gh_active",
    "title": "Tencent/AI-Infra-Guard",
    "url": "https://github.com/Tencent/AI-Infra-Guard",
-   "date": "2026-09-29",
+   "date": "2026-10-01",
    "score": 30,
    "tags": [
     "AgentOS",
@@ -71,7 +59,7 @@
    "kind": "gh_active",
    "title": "NVIDIA/SkillSpector",
    "url": "https://github.com/NVIDIA/SkillSpector",
-   "date": "2026-09-29",
+   "date": "2026-09-30",
    "score": 26,
    "tags": [
     "AgentOS",
@@ -82,23 +70,21 @@
    "desc": "Security scanner for AI agent skills. Detect vulnerabilities, malicious patterns, security risks, prompt injection, data exfiltration, and supply-chain risks in Claude Code, Codex, and MCP skills before you install them."
   },
   {
-   "kind": "gh_new",
-   "title": "iqbalr3000/palang-ai",
-   "url": "https://github.com/iqbalr3000/palang-ai",
-   "date": "2026-09-29",
-   "score": 26,
+   "kind": "deep_read",
+   "title": "zephyrproject-rtos/zephyr 发布 v4.5.0-rc1",
+   "url": "https://github.com/zephyrproject-rtos/zephyr/releases/tag/v4.5.0-rc1",
+   "date": "2026-09-30",
+   "score": 38,
    "tags": [
-    "Agent安全",
-    "侧信道攻击",
-    "汽车/具身"
+    "硬件抓手"
    ],
-   "desc": "OpenAI-compatible security gateway for LLM apps and agents, built for Indonesian data. Masks PII (NIK, NPWP, phone, email, card), detects prompt injection, enforces tool-call policy and catches   system-prompt leaks, wit"
+   "desc": "Zephyr 4.5.0-rc1"
   },
   {
    "kind": "gh_active",
    "title": "luckyPipewrench/pipelock",
    "url": "https://github.com/luckyPipewrench/pipelock",
-   "date": "2026-09-30",
+   "date": "2026-10-02",
    "score": 27,
    "tags": [
     "AgentOS",
@@ -109,43 +95,54 @@
   },
   {
    "kind": "gh_new",
-   "title": "Alpha-Park/genpark-constant-time-crypto-validator-skill",
-   "url": "https://github.com/Alpha-Park/genpark-constant-time-crypto-validator-skill",
-   "date": "2026-09-28",
-   "score": 18,
+   "title": "parkavenue9639/jevloop",
+   "url": "https://github.com/parkavenue9639/jevloop",
+   "date": "2026-09-26",
+   "score": 20,
    "tags": [
     "AgentOS",
     "Agent安全",
-    "侧信道攻击",
     "汽车/具身"
    ],
-   "desc": "Side-channel timing attack defense primitive providing constant-time bitwise and string digest comparison for agent security credentials."
+   "desc": "A Jev-driven general-purpose agent harness for faster, lower-cost execution, with built-in side-by-side experiments against LLM-only agents."
   },
   {
-   "kind": "gh_new",
-   "title": "alphaparkinc/genpark-constant-time-crypto-validator-skill",
-   "url": "https://github.com/alphaparkinc/genpark-constant-time-crypto-validator-skill",
-   "date": "2026-09-28",
-   "score": 18,
+   "kind": "gh_active",
+   "title": "affaan-m/ECC",
+   "url": "https://github.com/affaan-m/ECC",
+   "date": "2026-10-01",
+   "score": 22,
    "tags": [
     "AgentOS",
     "Agent安全",
-    "侧信道攻击",
     "汽车/具身"
    ],
-   "desc": "Side-channel timing attack defense primitive providing constant-time bitwise and string digest comparison for agent security credentials."
+   "desc": "The agent harness performance optimization system. Skills, instincts, memory, security, and research-first development for Claude Code, Codex, Opencode, Cursor and beyond."
   },
   {
-   "kind": "gh_new",
-   "title": "Haaareally/AdaHVLA-Adaptive_Harness_VLA",
-   "url": "https://github.com/Haaareally/AdaHVLA-Adaptive_Harness_VLA",
-   "date": "2026-09-25",
+   "kind": "gh_active",
+   "title": "msoedov/agentic_security",
+   "url": "https://github.com/msoedov/agentic_security",
+   "date": "2026-09-22",
    "score": 25,
    "tags": [
-    "AgentOS",
+    "Agent安全",
     "汽车/具身"
    ],
-   "desc": "AdaHVLA connects task-level reasoning and memory with vision-language-action (VLA) execution through an adaptive harness.  Preprint version of our paper is coming soon. The real-world deployement part is coming soon as w"
+   "desc": "Agentic LLM Vulnerability Scanner / AI red teaming kit 🧪"
+  },
+  {
+   "kind": "gh_active",
+   "title": "mcu-tools/mcuboot",
+   "url": "https://github.com/mcu-tools/mcuboot",
+   "date": "2026-10-01",
+   "score": 21,
+   "tags": [
+    "汽车/具身",
+    "硬件抓手",
+    "完整性"
+   ],
+   "desc": "Secure boot for 32-bit Microcontrollers!"
   }
  ]
 }
