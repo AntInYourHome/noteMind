@@ -1,148 +1,148 @@
 {
- "kind": "gh_active",
- "title": "Agent-Threat-Rule/agent-threat-rules",
- "url": "https://github.com/Agent-Threat-Rule/agent-threat-rules",
- "stars": 406,
- "star_delta": 0,
- "pushed_at": "2026-10-01",
- "created_at": "2026-03-09",
- "desc": "Open detection-rule standard for AI agent security threats — like Sigma, but for AI agents. Executable, testable rules for prompt injection, tool poisoning, context exfiltration and MCP attacks. Merged into open-source p",
- "lang": "TypeScript",
- "score": 37,
+ "kind": "paper",
+ "title": "MotorMind: Scaffolding General Vision Language Models for Zero-Shot Robot Manipulation",
+ "url": "http://arxiv.org/abs/2609.38078v1",
+ "date": "2026-09-29",
+ "cats": "cs.RO",
+ "desc": "Vision-language-action (VLA) models have advanced robotic manipulation, but their zero-shot generalization in new tasks and environments remains limited, and their reliance on specialized training keeps them from benefiting directly from rapidly advancing gene",
+ "score": 45,
  "hits": [
-  "MCP",
-  "tool poisoning",
-  "prompt injection",
+  "agentic",
   "agent",
-  "agent security",
-  "ECU"
+  "vision-language-action",
+  "VLA",
+  "robot",
+  "embodied"
  ],
  "tags": [
   "AgentOS",
   "Agent安全",
-  "汽车/具身"
+  "汽车/具身",
+  "产业"
  ],
- "date": "2026-10-01",
+ "venue": "",
  "detail": {
-  "fetched": "<div align=\"center\">\n\n<img alt=\"ATR — Agent Threat Rules\" src=\"assets/logo-light.png\" width=\"480\" />\n\n# ATR — Agent Threat Rules\n\n**Open detection rule format for AI agent security threats.**\n\nAI Agent 威脅偵測規則的開放格式\n\n[![npm](https://img.shields.io/npm/v/agent-threat-rules?style=flat-square&color=brightgreen&label=npm)](https://www.npmjs.com/package/agent-threat-rules)\n[![PyPI](https://img.shields.io/pypi/v/pyatr?style=flat-square&color=brightgreen&label=PyPI)](https://pypi.org/project/pyatr/)\n[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-ATR%20Scan-2ea44f?style=flat-square&logo=github)](https://github.com/marketplace/actions/atr-scan)\n[![License: MIT](https://img.shields.io/badge/license-MIT-brightgreen?style=flat-square)](LICENSE)\n[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.19178002-blue?style=flat-square)](https://doi.org/10.5281/zenodo.19178002)\n[![Rules](https://img.shields.io/badge/rules-825-blue?style=flat-square)](#5-specification)\n[![Categories](https://img.shields.io/badge/categories-10-blue?style=flat-square)](#7-coverage)\n[![OWASP Agentic](https://img.shields.io/badge/OWASP_Agentic_Top_10-10%2F10-brightgreen?style=flat-square)](#7-coverage)\n[![SAFE-MCP](https://img.shields.io/badge/SAFE--MCP-91.8%25-brightgreen?style=flat-square)](#7-coverage)\n[![Sponsor](https://img.shields.io/badge/sponsor-Open%20Collective-7FADF2?style=flat-square&logo=opencollective&logoColor=white)](https://opencollective.com/agent-threat-rules)\n\n</div>\n\n---\n\n## Abstract\n\nATR (Agent Threat Rules) is an open detection rule format for AI agent security threats. Rules are written as YAML documents conforming to a versioned schema, identified by the public `ATR-YYYY-NNNNN` scheme, and evaluated by any conforming engine. The reference TypeScript engine and a Python wrapper ship in this repository under the MIT license. ATR is to AI-agent threat detection what [Sigma](https://github.com/SigmaHQ/sigma) is to SIEM detection and [YARA](https://github.com/VirusTotal/yara) is to malware signatures — a vendor-neutral, machine-readable, peer-reviewable rule format.\n\n## Status of This Document\n\nATR is published as a **Working Draft** at version `3.0.0-alpha.1`. The rule format defined in `SPEC.md` is stable and merged into open-source repos at Microsoft, Cisco, and Gen Digital, and integrated by standards-body projects (MISP / CIRCL, OWASP Agent Security Regression Harness, SigmaHQ, FINOS Common Cloud Controls); full list with PR links in [§6 Adoption](#6-adoption). Governance is currently single-maintainer (BDFL) transitioning to a Technical Steering Committee per [GOVERNANCE.md](GOVERNANCE.md).\n\nAll numbers in this document are sourced from [`data/stats.json`](data/stats.json), which is the canonical record of the project's current state. Where this README and `stats.json` disagree, `stats.json` is authoritative.\n\nThis document is bilingual where the section title benefits from it. Section bodies are English-only to keep the normative content unambiguous.\n\n## Standardization Status (added 2026-05-25)\n\nATR is publishing proposal-stage standardization scaffolding ahead of OASIS Open Project submission. New directories on the repo file tree:\n\n- [`governance/`](governance/) — proposed 9-seat TSC charter (v2.0) and standard threat model\n- [`spec/atr-event-v1.0.md`](spec/atr-event-v1.0.md), [`atr-profile-v1.0.md`](spec/atr-profile-v1.0.md), [`atr-correlation-v1.0.md`](spec/atr-correlation-v1.0.md), [`atr-language-detection-v1.0.md`](spec/atr-language-detection-v1.0.md) — proposed v1.0 spec layer with JSON schemas\n- [`spec/conformance/`](spec/conformance/) — proposed conformance corpus structure (L1/L2/L3)\n- [`legal/`](legal/) — proposed DCO, trademark policy, jurisdiction notes\n- [`certification/`](certification/) — proposed ATR-Certified™ program guide\n- [`engines/`](engines/) — Python and Go reference impl interface contracts (TypeScript is the existing engine at `src/`)\n\n**All scaffolding is tagged PROPOSED v1.0 / v2.0 and is NOT ratified.** The 9-seat TSC has not been formed. The trust marks are not registered. Existing v1.1 governance ([`GOVERNANCE.md`](GOVERNANCE.md)) continues to operate. The rule format, npm package, TypeScript engine API, and the full rule corpus are unchanged — existing ecosystem integrations (Microsoft AGT, Cisco AI Defense, MISP CIRCL, OWASP A-S-R-H, precize, Sage) work without modification.\n\nSee [`STANDARDIZATION-STATUS.md`](STANDARDIZATION-STATUS.md) for the full status matrix mapping every new artifact to `{STABLE IN PRODUCTION, PROPOSED, SKELETON, PRELIMINARY}` and timeline for OASIS submission, community comment, and ratification.\n\n## ATD — Agentic Threat Detection\n\nATD is ATR's technique catalog: an enumeration of agent-runtime attack *techniques* — the \"what\" — each mapped to MITRE ATLAS, OWASP ASI, and CWE. ATR *rules* are the \"how\" that detect them. ATD is to ATR what MITRE ATLAS is to a detection ruleset: a knowledge layer that names every known agent-runtime threat, whether or not an executable rule exists for it yet.\n\n- **Live catalog (machine-readable):** <https://agentthreatrule.org/atd>\n- **80 techniques across 9 tactics**, every one mapped to an upstream framework (or with a documented gap); a subset carry a live ATR detection rule, the rest are documented — a technique needs verifiable provenance, not a rule.\n- **Schema gate:** every PR runs `scripts/validate-atd.ts` (validates each technique against the normative `website/public/atd/atd-technique.schema.json`) and `scripts/atd/verify-atd-mappings.ts` (verifies every cited MITRE ATLAS id against the authoritative catalog).\n\n## Table of Contents\n\n- [1. Background](#1-background)\n- [2. Conformance Levels](#2-conformance-levels)\n- [3. Installation](#3-installation)\n- [4. Usage](#4-usage)\n- [5. Specification](#5-specification)\n- [6. Adoption](#6-adoption)\n- [7. Coverage](#7-coverage)\n- [8. Evaluation](#8-evaluation)\n- [9. Governance](#9-governance)\n- [10. Security](#10-security)\n- [11. Telemetry](#11-t",
-  "source_type": "gh_active"
+  "fetched": "作者: Bingxuan Li, Siqi Song, Yizhuo Wu, Jiarui Yao, Tong Zhang, Huan Zhang\n\n完整摘要: Vision-language-action (VLA) models have advanced robotic manipulation, but their zero-shot generalization in new tasks and environments remains limited, and their reliance on specialized training keeps them from benefiting directly from rapidly advancing general-purpose vision-language models (VLMs). In parallel, recent agentic robotic systems leverage VLMs for high-level reasoning or coding agents for robot control, but often depend on extensive external models and tools, introducing additional complexity and cost. This motivates us to ask: Can a general-purpose VLM itself operate a robot more like the human teleoperator by reasoning directly from observations, issuing actions, and continuously adapting to execution feedback, without relying on external models such as learned action experts, coding agents or grounding tools like SAM3? In this work, we introduce MotorMind, a robot manipulation harness that connects VLM-proposed mid-level actions to deterministic robot control and feedback, with asynchronous monitoring and background memory updates. Without task-specific policy training, coding agents, or additional grounding tools such as SAM3, MotorMind achieves 66.7% success on the base LIBERO-PRO suites and 53.8% under perturbations, compared with at most 13.3% and 19.2%, respectively, for the prior zero-shot methods we evaluate. The same interface reaches 95% average success on a real xArm6 robot across direct manipulation and human-perturbation settings. Replacing the backbone with a stronger VLM further improves performance, while the remaining failures - primarily due to visual grounding, embodied reasoning, and action knowledge - decrease as VLM capability improves. These results show that a general-purpose VLM, when equipped with an appropriate mid-level action representation and asynchronous execution harness, can perform effective zero-shot robotic manipulation.",
+  "source_type": "paper"
  },
  "runner_ups": [
   {
-   "kind": "gh_active",
-   "title": "PrismorSec/prismor",
-   "url": "https://github.com/PrismorSec/prismor",
+   "kind": "paper",
+   "title": "PACE: Provenance-Aware Capability Enforcement for Tool-Using LLM Agents",
+   "url": "http://arxiv.org/abs/2610.01349v1",
    "date": "2026-10-01",
-   "score": 29,
+   "score": 34,
    "tags": [
     "AgentOS",
     "Agent安全",
+    "机密计算",
     "侧信道攻击",
-    "汽车/具身"
-   ],
-   "desc": " Self-hosted runtime control plane for AI agents. Observe or HITL approve or Block rogue tool calls before it executes: secret leaks, prompt injection, supply chain etc in a local dashboard. Agent agnostic (Claude, codex"
-  },
-  {
-   "kind": "gh_active",
-   "title": "Tencent/AI-Infra-Guard",
-   "url": "https://github.com/Tencent/AI-Infra-Guard",
-   "date": "2026-10-01",
-   "score": 30,
-   "tags": [
-    "AgentOS",
-    "Agent安全",
-    "汽车/具身"
-   ],
-   "desc": "A full-stack AI Red Teaming platform securing AI ecosystems via Agent Scan, Skills Scan, MCP scan, AI Infra scan and LLM jailbreak evaluation."
-  },
-  {
-   "kind": "gh_active",
-   "title": "NVIDIA/SkillSpector",
-   "url": "https://github.com/NVIDIA/SkillSpector",
-   "date": "2026-09-30",
-   "score": 26,
-   "tags": [
-    "AgentOS",
-    "Agent安全",
     "汽车/具身",
     "产业"
    ],
-   "desc": "Security scanner for AI agent skills. Detect vulnerabilities, malicious patterns, security risks, prompt injection, data exfiltration, and supply-chain risks in Claude Code, Codex, and MCP skills before you install them."
+   "desc": "Tool-using large language model (LLM) agents turn generated text into real side effects, so poisoned tool metadata, retrieved pages, memory, and reusable skills can steer the next call. Vetting an artifact before admission does not settle this. A safe variant "
   },
   {
    "kind": "deep_read",
-   "title": "zephyrproject-rtos/zephyr 发布 v4.5.0-rc1",
-   "url": "https://github.com/zephyrproject-rtos/zephyr/releases/tag/v4.5.0-rc1",
-   "date": "2026-09-30",
-   "score": 38,
+   "title": "op-tee/optee_os 发布 4.11.0-rc1",
+   "url": "https://github.com/OP-TEE/optee_os/releases/tag/4.11.0-rc1",
+   "date": "2026-10-02",
+   "score": 52,
    "tags": [
+    "机密计算",
     "硬件抓手"
    ],
-   "desc": "Zephyr 4.5.0-rc1"
+   "desc": "4.11.0-rc1"
   },
   {
-   "kind": "gh_active",
-   "title": "luckyPipewrench/pipelock",
-   "url": "https://github.com/luckyPipewrench/pipelock",
-   "date": "2026-10-02",
-   "score": 27,
+   "kind": "paper",
+   "title": "Remember What You Did: Action-History Memory with Dual-Expert Denoising for Long-Horizon Vision-Language-Action Policies",
+   "url": "http://arxiv.org/abs/2609.37307v1",
+   "date": "2026-09-29",
+   "score": 44,
    "tags": [
-    "AgentOS",
-    "Agent安全",
+    "机密计算",
     "汽车/具身"
    ],
-   "desc": "Open-source AI agent firewall for MCP security and agent egress. Scans mediated HTTP, MCP, A2A, and WebSocket traffic for exfiltration, SSRF, and prompt injection, and emits mediator-signed action receipts: verifiable au"
+   "desc": "Vision-language-action (VLA) models have driven rapid progress in robotic manipulation, demonstrating strong fine-grained control and promising performance on long-horizon tasks. However, many existing VLAs lack explicit access to interaction history, making t"
   },
   {
-   "kind": "gh_new",
-   "title": "parkavenue9639/jevloop",
-   "url": "https://github.com/parkavenue9639/jevloop",
-   "date": "2026-09-26",
-   "score": 20,
+   "kind": "paper",
+   "title": "ToolFence: Fine-Grained Authorization for Secure Tool-Using LLM Agents",
+   "url": "http://arxiv.org/abs/2609.37196v1",
+   "date": "2026-09-29",
+   "score": 40,
    "tags": [
-    "AgentOS",
     "Agent安全",
+    "机密计算",
     "汽车/具身"
    ],
-   "desc": "A Jev-driven general-purpose agent harness for faster, lower-cost execution, with built-in side-by-side experiments against LLM-only agents."
+   "desc": "Tool-using LLM agents remain vulnerable to indirect prompt injection because trusted instructions and untrusted observations share one context, allowing malicious content to steer consequential input-filtering defenses. Multi-path consensus defenses still leav"
   },
   {
-   "kind": "gh_active",
-   "title": "affaan-m/ECC",
-   "url": "https://github.com/affaan-m/ECC",
+   "kind": "paper",
+   "title": "The Innocent Courier: Covert Exfiltration Through Legitimate LLM Web Fetching",
+   "url": "http://arxiv.org/abs/2610.01768v1",
    "date": "2026-10-01",
-   "score": 22,
+   "score": 35,
+   "tags": [
+    "Agent安全",
+    "机密计算",
+    "侧信道攻击",
+    "汽车/具身"
+   ],
+   "desc": "With the increasing capabilities of Large-Language-Models (LLMs) and LLM-based agents, users are increasingly using them to solve everyday problems, such as answering e-mails or providing programming support. Existing work has extensively investigated security"
+  },
+  {
+   "kind": "deep_read",
+   "title": "op-tee/optee_os 近期安全相关提交",
+   "url": "https://github.com/op-tee/optee_os/commits",
+   "date": "2026-10-03",
+   "score": 46,
+   "tags": [
+    "机密计算",
+    "硬件抓手"
+   ],
+   "desc": "core: riscv: boot: initialize MPXY on all harts and probe RPMI channels"
+  },
+  {
+   "kind": "paper",
+   "title": "From A2A Attacks to Envelope-Layer Defense: Red-Teaming Evaluation of LLM Agents and a Three-Layer Isomorphic Attack-Defense Model",
+   "url": "http://arxiv.org/abs/2610.00392v1",
+   "date": "2026-09-30",
+   "score": 37,
    "tags": [
     "AgentOS",
     "Agent安全",
     "汽车/具身"
    ],
-   "desc": "The agent harness performance optimization system. Skills, instincts, memory, security, and research-first development for Claude Code, Codex, Opencode, Cursor and beyond."
+   "desc": "Agent interaction protocols such as ACP and A2A have moved LLM-based agents toward multi-agent collaboration, introducing new security threats. A task sent by a remote peer over A2A is treated as a legitimate request, providing a natural channel for indirect p"
   },
   {
-   "kind": "gh_active",
-   "title": "msoedov/agentic_security",
-   "url": "https://github.com/msoedov/agentic_security",
-   "date": "2026-09-22",
-   "score": 25,
+   "kind": "paper",
+   "title": "Urgent Actions Go First: Urgency-Aware Denoising for Real-Time VLA Control",
+   "url": "http://arxiv.org/abs/2609.37772v1",
+   "date": "2026-09-29",
+   "score": 36,
    "tags": [
-    "Agent安全",
-    "汽车/具身"
+    "机密计算",
+    "汽车/具身",
+    "产业"
    ],
-   "desc": "Agentic LLM Vulnerability Scanner / AI red teaming kit 🧪"
+   "desc": "Diffusion and flow-matching Vision-Language-Action (VLA) policies generate action chunks through iterative denoising, incurring substantial inference latency that severely limits real-time robotic control. Existing acceleration methods treat an action chunk as"
   },
   {
-   "kind": "gh_active",
-   "title": "mcu-tools/mcuboot",
-   "url": "https://github.com/mcu-tools/mcuboot",
-   "date": "2026-10-01",
-   "score": 21,
+   "kind": "paper",
+   "title": "DSDyn-VLA: A Dual-Stream Dynamic Manipulation Framework with Motion Perception, Future Awareness, and Realtime Correction",
+   "url": "http://arxiv.org/abs/2609.39198v1",
+   "date": "2026-09-30",
+   "score": 36,
    "tags": [
     "汽车/具身",
-    "硬件抓手",
-    "完整性"
+    "完整性",
+    "产业"
    ],
-   "desc": "Secure boot for 32-bit Microcontrollers!"
+   "desc": "While Vision-Language-Action (VLA) models excel in static tasks, they struggle in dynamic environments where objects are in motion (e.g., conveyor belt manipulation). We identify three fundamental limitations hindering current VLAs in these scenarios: the \\tex"
   }
  ]
 }
