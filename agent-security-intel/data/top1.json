@@ -1,31 +1,61 @@
 {
  "kind": "paper",
- "title": "MotorMind: Scaffolding General Vision Language Models for Zero-Shot Robot Manipulation",
- "url": "http://arxiv.org/abs/2609.38078v1",
- "date": "2026-09-29",
- "cats": "cs.RO",
- "desc": "Vision-language-action (VLA) models have advanced robotic manipulation, but their zero-shot generalization in new tasks and environments remains limited, and their reliance on specialized training keeps them from benefiting directly from rapidly advancing gene",
- "score": 45,
+ "title": "Containing the Autonomous Operator: A Defense-in-Depth Framework and Reference Architecture for Securing AI Agents on Kubernetes",
+ "url": "http://arxiv.org/abs/2610.02861v1",
+ "date": "2026-10-02",
+ "cats": "cs.CR,cs.NI",
+ "desc": "Large language model (LLM) agents are moving from chat interfaces into infrastructure operations, where they read telemetry, call tools, generate and execute code, and change the state of production Kubernetes clusters. This collapses a boundary that conventio",
+ "score": 51,
  "hits": [
+  "MCP",
+  "prompt injection",
   "agentic",
   "agent",
-  "vision-language-action",
-  "VLA",
-  "robot",
-  "embodied"
+  "TEE",
+  "NPU"
  ],
  "tags": [
   "AgentOS",
   "Agent安全",
+  "机密计算",
   "汽车/具身",
   "产业"
  ],
  "venue": "",
  "detail": {
-  "fetched": "作者: Bingxuan Li, Siqi Song, Yizhuo Wu, Jiarui Yao, Tong Zhang, Huan Zhang\n\n完整摘要: Vision-language-action (VLA) models have advanced robotic manipulation, but their zero-shot generalization in new tasks and environments remains limited, and their reliance on specialized training keeps them from benefiting directly from rapidly advancing general-purpose vision-language models (VLMs). In parallel, recent agentic robotic systems leverage VLMs for high-level reasoning or coding agents for robot control, but often depend on extensive external models and tools, introducing additional complexity and cost. This motivates us to ask: Can a general-purpose VLM itself operate a robot more like the human teleoperator by reasoning directly from observations, issuing actions, and continuously adapting to execution feedback, without relying on external models such as learned action experts, coding agents or grounding tools like SAM3? In this work, we introduce MotorMind, a robot manipulation harness that connects VLM-proposed mid-level actions to deterministic robot control and feedback, with asynchronous monitoring and background memory updates. Without task-specific policy training, coding agents, or additional grounding tools such as SAM3, MotorMind achieves 66.7% success on the base LIBERO-PRO suites and 53.8% under perturbations, compared with at most 13.3% and 19.2%, respectively, for the prior zero-shot methods we evaluate. The same interface reaches 95% average success on a real xArm6 robot across direct manipulation and human-perturbation settings. Replacing the backbone with a stronger VLM further improves performance, while the remaining failures - primarily due to visual grounding, embodied reasoning, and action knowledge - decrease as VLM capability improves. These results show that a general-purpose VLM, when equipped with an appropriate mid-level action representation and asynchronous execution harness, can perform effective zero-shot robotic manipulation.",
+  "fetched": "作者: Simhadri Podala Narasimha\n\n完整摘要: Large language model (LLM) agents are moving from chat interfaces into infrastructure operations, where they read telemetry, call tools, generate and execute code, and change the state of production Kubernetes clusters. This collapses a boundary that conventional cloud-native security assumes: the boundary between data and control. Content that an agent merely reads (a log line, a ticket, a tool description) can redirect what it does. This paper argues that the model must not be treated as a security boundary and that agent safety on Kubernetes is therefore an infrastructure problem: every guarantee must continue to hold under the assumption that the agent is fully compromised by prompt injection. We contribute (i) a threat model and ten-class threat taxonomy for agents operating on and within Kubernetes, aligned with emerging OWASP guidance for agentic applications; (ii) nine design principles, centered on complete mediation at the tool boundary and on breaking the combination of untrusted input, sensitive access, and external egress; (iii) a seven-layer defense-in-depth framework that maps each principle to native or widely adopted Kubernetes mechanisms: workload identity, RBAC and ValidatingAdmissionPolicy, gVisor/Kata sandboxing via the SIG Apps Agent Sandbox project, FQDN-aware egress policy, an agent/MCP gateway with policy-as-code over tool arguments, and eBPF runtime enforcement; (iv) a reference architecture with concrete policy artifacts and per-layer bindings for Amazon EKS, Azure Kubernetes Service, and Google Kubernetes Engine; and (v) a qualitative evaluation comprising a threat-control coverage matrix and four attack walkthroughs, with a proposed empirical methodology. We report no measured attack-success or overhead figures; instead we identify residual risks and the measurements needed to validate the framework.",
   "source_type": "paper"
  },
  "runner_ups": [
+  {
+   "kind": "paper",
+   "title": "Persona Guardrail: A Production-Grade Defense Framework for Agentic Systems",
+   "url": "http://arxiv.org/abs/2610.03434v1",
+   "date": "2026-10-02",
+   "score": 49,
+   "tags": [
+    "AgentOS",
+    "Agent安全",
+    "机密计算",
+    "汽车/具身",
+    "产业"
+   ],
+   "desc": "Large language model-based agents are increasingly deployed to perform domain-specific tasks by interacting with enterprise knowledge, tools, and external services. Existing runtime guardrails primarily target prompt injection and other attack-specific behavio"
+  },
+  {
+   "kind": "paper",
+   "title": "Evaluating and Improving the Robustness of Large Language Models to Input Sequence Variations",
+   "url": "http://arxiv.org/abs/2610.02432v1",
+   "date": "2026-10-01",
+   "score": 48,
+   "tags": [
+    "AgentOS",
+    "Agent安全",
+    "机密计算",
+    "产业"
+   ],
+   "desc": "Large language models (LLMs) in production systems face prompt injections, trojans (backdoors), and manipulation of automatic quality metrics. This thesis develops models, methods, and algorithms for evaluating and improving LLM robustness to adversarial input"
+  },
   {
    "kind": "paper",
    "title": "PACE: Provenance-Aware Capability Enforcement for Tool-Using LLM Agents",
@@ -44,40 +74,15 @@
   },
   {
    "kind": "deep_read",
-   "title": "op-tee/optee_os 发布 4.11.0-rc1",
-   "url": "https://github.com/OP-TEE/optee_os/releases/tag/4.11.0-rc1",
-   "date": "2026-10-02",
-   "score": 52,
+   "title": "op-tee/optee_os 近期安全相关提交",
+   "url": "https://github.com/op-tee/optee_os/commits",
+   "date": "2026-10-06",
+   "score": 49,
    "tags": [
     "机密计算",
     "硬件抓手"
    ],
-   "desc": "4.11.0-rc1"
-  },
-  {
-   "kind": "paper",
-   "title": "Remember What You Did: Action-History Memory with Dual-Expert Denoising for Long-Horizon Vision-Language-Action Policies",
-   "url": "http://arxiv.org/abs/2609.37307v1",
-   "date": "2026-09-29",
-   "score": 44,
-   "tags": [
-    "机密计算",
-    "汽车/具身"
-   ],
-   "desc": "Vision-language-action (VLA) models have driven rapid progress in robotic manipulation, demonstrating strong fine-grained control and promising performance on long-horizon tasks. However, many existing VLAs lack explicit access to interaction history, making t"
-  },
-  {
-   "kind": "paper",
-   "title": "ToolFence: Fine-Grained Authorization for Secure Tool-Using LLM Agents",
-   "url": "http://arxiv.org/abs/2609.37196v1",
-   "date": "2026-09-29",
-   "score": 40,
-   "tags": [
-    "Agent安全",
-    "机密计算",
-    "汽车/具身"
-   ],
-   "desc": "Tool-using LLM agents remain vulnerable to indirect prompt injection because trusted instructions and untrusted observations share one context, allowing malicious content to steer consequential input-filtering defenses. Multi-path consensus defenses still leav"
+   "desc": "crypto: asu: fall back RSA when KeyManager is unavailable；crypto: asu: fix HMAC final() buffer length handling；crypto: asu: finish active hash and HMAC operations on free；crypto: asu: serialize SHA2/SHA3 across hash, HMAC, and RSA OAEP/PSS"
   },
   {
    "kind": "paper",
@@ -94,18 +99,6 @@
    "desc": "With the increasing capabilities of Large-Language-Models (LLMs) and LLM-based agents, users are increasingly using them to solve everyday problems, such as answering e-mails or providing programming support. Existing work has extensively investigated security"
   },
   {
-   "kind": "deep_read",
-   "title": "op-tee/optee_os 近期安全相关提交",
-   "url": "https://github.com/op-tee/optee_os/commits",
-   "date": "2026-10-03",
-   "score": 46,
-   "tags": [
-    "机密计算",
-    "硬件抓手"
-   ],
-   "desc": "core: riscv: boot: initialize MPXY on all harts and probe RPMI channels"
-  },
-  {
    "kind": "paper",
    "title": "From A2A Attacks to Envelope-Layer Defense: Red-Teaming Evaluation of LLM Agents and a Three-Layer Isomorphic Attack-Defense Model",
    "url": "http://arxiv.org/abs/2610.00392v1",
@@ -120,19 +113,6 @@
   },
   {
    "kind": "paper",
-   "title": "Urgent Actions Go First: Urgency-Aware Denoising for Real-Time VLA Control",
-   "url": "http://arxiv.org/abs/2609.37772v1",
-   "date": "2026-09-29",
-   "score": 36,
-   "tags": [
-    "机密计算",
-    "汽车/具身",
-    "产业"
-   ],
-   "desc": "Diffusion and flow-matching Vision-Language-Action (VLA) policies generate action chunks through iterative denoising, incurring substantial inference latency that severely limits real-time robotic control. Existing acceleration methods treat an action chunk as"
-  },
-  {
-   "kind": "paper",
    "title": "DSDyn-VLA: A Dual-Stream Dynamic Manipulation Framework with Motion Perception, Future Awareness, and Realtime Correction",
    "url": "http://arxiv.org/abs/2609.39198v1",
    "date": "2026-09-30",
@@ -143,6 +123,33 @@
     "产业"
    ],
    "desc": "While Vision-Language-Action (VLA) models excel in static tasks, they struggle in dynamic environments where objects are in motion (e.g., conveyor belt manipulation). We identify three fundamental limitations hindering current VLAs in these scenarios: the \\tex"
+  },
+  {
+   "kind": "paper",
+   "title": "Threat-Preserving Representation Sensitivity in Agent-Security Benchmarks",
+   "url": "http://arxiv.org/abs/2610.03585v1",
+   "date": "2026-10-02",
+   "score": 32,
+   "tags": [
+    "AgentOS",
+    "Agent安全",
+    "汽车/具身",
+    "产业"
+   ],
+   "desc": "Security benchmarks for LLM-based agents often report the attack success rate (ASR) as a measure of model robustness and use these scores to compare different models and defense mechanisms, assuming that they describe the security of the agent. In this paper, "
+  },
+  {
+   "kind": "paper",
+   "title": "Securing Computer-Use Agents Against Branch Steering Attacks",
+   "url": "http://arxiv.org/abs/2610.03089v1",
+   "date": "2026-10-02",
+   "score": 35,
+   "tags": [
+    "Agent安全",
+    "机密计算",
+    "汽车/具身"
+   ],
+   "desc": "Modern Computer Use Agents (CUAs) directly interact with graphical user interfaces and execute third-party web tools, exposing them to indirect prompt injection across every rendered page and tool response. While the Dual-LLM pattern is the primary system-leve"
   }
  ]
 }
